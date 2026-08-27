@@ -119,16 +119,42 @@ export class AttendanceEngineV21773200000000 implements MigrationInterface {
       CONSTRAINT "PK_attendance_sessions_id" PRIMARY KEY ("id")
     )`);
 
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."attendance_request_status_enum" AS ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."attendance_regularization_request_type_enum" AS ENUM(
-      'MISSING_PUNCH_IN',
-      'MISSING_PUNCH_OUT',
-      'LATE_PUNCH',
-      'EARLY_OUT',
-      'GEOFENCE_FAILURE',
-      'INCORRECT_STATUS',
-      'OTHER'
-    )`);
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_type type_row
+          JOIN pg_namespace namespace_row ON namespace_row.oid = type_row.typnamespace
+          WHERE namespace_row.nspname = 'public'
+            AND type_row.typname = 'attendance_request_status_enum'
+        ) THEN
+          CREATE TYPE "public"."attendance_request_status_enum" AS ENUM('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED');
+        END IF;
+      END $$;
+    `);
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_type type_row
+          JOIN pg_namespace namespace_row ON namespace_row.oid = type_row.typnamespace
+          WHERE namespace_row.nspname = 'public'
+            AND type_row.typname = 'attendance_regularization_request_type_enum'
+        ) THEN
+          CREATE TYPE "public"."attendance_regularization_request_type_enum" AS ENUM(
+            'MISSING_PUNCH_IN',
+            'MISSING_PUNCH_OUT',
+            'LATE_PUNCH',
+            'EARLY_OUT',
+            'GEOFENCE_FAILURE',
+            'INCORRECT_STATUS',
+            'OTHER'
+          );
+        END IF;
+      END $$;
+    `);
 
     await queryRunner.query(`CREATE TABLE IF NOT EXISTS "attendance_regularization_requests" (
       "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
