@@ -721,6 +721,19 @@ export class PayrollService {
     return this.formatRecord(record);
   }
 
+  async deleteRecord(recordId: string) {
+    const record = await this.repo.findRecordById(recordId);
+    if (!record) throw ApiError.notFound('Payroll record not found');
+
+    await this.repo.deleteRecord(recordId);
+    return {
+      id: record.id,
+      employeeId: record.employeeId,
+      month: record.month,
+      year: record.year,
+    };
+  }
+
   async releasePayslip(recordId: string) {
     const record = await this.repo.findRecordById(recordId);
     if (!record) throw ApiError.notFound('Payroll record not found');

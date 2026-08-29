@@ -163,6 +163,11 @@ export class PayrollController {
     ApiResponse.success(res, 'Payroll record', result);
   }
 
+  static async deleteRecord(req: Request, res: Response): Promise<void> {
+    const result = await payrollService.deleteRecord(req.params.id as string);
+    ApiResponse.success(res, 'Payslip deleted successfully', result);
+  }
+
   // ─── Admin: Email payslip ───
   static async emailPayslip(req: Request, res: Response): Promise<void> {
     const result = await payrollService.emailPayslip(req.params.id as string);

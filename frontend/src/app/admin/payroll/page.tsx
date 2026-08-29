@@ -19,6 +19,14 @@ import {
   Input,
   Tooltip,
   Checkbox,
+  AlertDialog,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
+  Button,
+  useDisclosure,
 } from "@chakra-ui/react";
 import {
   DollarSign,
@@ -105,6 +113,10 @@ export default function PayrollPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailingId, setEmailingId] = useState<string | null>(null);
   const [releasingId, setReleasingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const deleteDisclosure = useDisclosure();
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
 
   const columns = useMemo<Column<PayrollRecordType>[]>(
     () => [
@@ -199,11 +211,24 @@ export default function PayrollPage() {
                 </Badge>
               </Tooltip>
             )}
+            <Tooltip label="Delete Payslip" hasArrow>
+              <IconButton
+                aria-label="Delete payslip"
+                icon={<Trash2 size={14} />}
+                size="xs"
+                variant="ghost"
+                colorScheme="red"
+                onClick={() => {
+                  setDeleteTarget(row);
+                  deleteDisclosure.onOpen();
+                }}
+              />
+            </Tooltip>
           </Flex>
         ),
       },
     ],
-    [downloadingId, emailingId, releasingId],
+    [downloadingId, emailingId, releasingId, deleteDisclosure],
   );
 
   const handleDownload = async (id: string) => {
@@ -246,6 +271,28 @@ export default function PayrollPage() {
       toast({ title: "Release failed", description: err.message, status: "error", duration: 3500, isClosable: true });
     } finally {
       setReleasingId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await payrollApi.deleteRecord(deleteTarget.id);
+      toast({
+        title: "Payslip deleted",
+        description: "You can now generate a new payslip for this employee and month.",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      deleteDisclosure.onClose();
+      setDeleteTarget(null);
+      await fetchData();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -319,6 +366,33 @@ export default function PayrollPage() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      <AlertDialog
+        isOpen={deleteDisclosure.isOpen}
+        leastDestructiveRef={cancelDeleteRef}
+        onClose={deleteDisclosure.onClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent borderRadius="xl">
+            <AlertDialogHeader fontSize="lg" fontWeight="700">Delete Payslip</AlertDialogHeader>
+            <AlertDialogBody>
+              Delete the payslip for{" "}
+              <Text as="span" fontWeight="700">
+                {deleteTarget?.employeeSnapshot?.employeeName || "this employee"}
+              </Text>{" "}
+              for {deleteTarget ? `${MONTHS[deleteTarget.month - 1]} ${deleteTarget.year}` : "this period"}?{" "}
+              This removes the payroll record from the employee portal and allows you to generate it again.
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelDeleteRef} onClick={deleteDisclosure.onClose} size="sm">Cancel</Button>
+              <Button colorScheme="red" onClick={handleDelete} isLoading={deleting} ml={3} size="sm">
+                Delete Payslip
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 }
@@ -342,6 +416,7 @@ function ManualPayrollTab({
   const [generating, setGenerating] = useState(false);
   const [generatedRecord, setGeneratedRecord] = useState<PayrollRecordType | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [deletingGenerated, setDeletingGenerated] = useState(false);
   const toast = useToast();
 
   const handlePreview = async () => {
@@ -399,6 +474,28 @@ function ManualPayrollTab({
       toast({ title: "Download failed", description: err.message, status: "error", duration: 3500, isClosable: true });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleDeleteGenerated = async () => {
+    if (!generatedRecord) return;
+    if (!window.confirm("Delete this payslip? You can generate it again after deletion.")) return;
+    setDeletingGenerated(true);
+    try {
+      await payrollApi.deleteRecord(generatedRecord.id);
+      setGeneratedRecord(null);
+      toast({
+        title: "Payslip deleted",
+        description: "Update the payroll details if needed, then generate it again.",
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+      onGenerated();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setDeletingGenerated(false);
     }
   };
 
@@ -552,6 +649,17 @@ function ManualPayrollTab({
                 color="brand.600"
               >
                 Download Payslip
+              </SecondaryButton>
+            )}
+            {generatedRecord && (
+              <SecondaryButton
+                leftIcon={<Trash2 size={16} />}
+                onClick={handleDeleteGenerated}
+                isLoading={deletingGenerated}
+                borderColor="red.300"
+                color="red.600"
+              >
+                Delete Payslip
               </SecondaryButton>
             )}
             {generatedRecord && (

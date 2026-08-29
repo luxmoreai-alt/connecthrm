@@ -55,6 +55,7 @@ router.post('/runs/system-generate', roleMiddleware('ADMIN'), asyncHandler(Payro
 router.post('/runs/:id/dispatch', roleMiddleware('ADMIN'), asyncHandler(PayrollController.dispatchRun));
 router.get('/records', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRecords));
 router.get('/records/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.getRecord));
+router.delete('/records/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.deleteRecord));
 router.get('/records/:id/download', roleMiddleware('ADMIN'), asyncHandler(PayrollController.downloadPayslip));
 router.post('/preview', roleMiddleware('ADMIN'), asyncHandler(PayrollController.preview));
 router.post('/generate', roleMiddleware('ADMIN'), asyncHandler(PayrollController.generateManual));

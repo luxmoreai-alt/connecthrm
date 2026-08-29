@@ -119,6 +119,10 @@ export class PayrollRepository {
     return this.recordRepo.save(record);
   }
 
+  async deleteRecord(id: string): Promise<void> {
+    await this.recordRepo.delete(id);
+  }
+
   async countRecords(filters?: {
     month?: number;
     year?: number;

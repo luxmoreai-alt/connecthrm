@@ -209,6 +209,11 @@ export const payrollApi = {
 
   getRecord: (id: string) => api.get<PayrollRecord>(`${BASE}/records/${id}`),
 
+  deleteRecord: (id: string) =>
+    api.delete<{ id: string; employeeId: string; month: number; year: number }>(
+      `${BASE}/records/${id}`,
+    ),
+
   emailPayslip: (id: string) => api.post(`${BASE}/records/${id}/email`),
 
   releasePayslip: (id: string) =>
