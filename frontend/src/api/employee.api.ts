@@ -11,6 +11,7 @@ import type {
   EmployeeSalaryStructureRow,
   SalaryComputation,
   SaveEmployeeSalaryStructureInput,
+  EmployeeBankingDetails,
 } from "@/types";
 
 export const employeeApi = {
@@ -40,6 +41,9 @@ export const employeeApi = {
 
   sendOnboardingLink: (id: string) =>
     api.post<{ email: string; sent: boolean }>(`/employees/${id}/send-onboarding-link`),
+
+  sendBankingDetailsLink: (id: string) =>
+    api.post<{ email: string; sent: boolean }>(`/employees/${id}/send-banking-details-link`),
 
   uploadPhoto: (id: string, photo: File) => {
     const formData = new FormData();
@@ -101,6 +105,12 @@ export const salaryDetailsApi = {
 };
 
 export const salaryStructureApi = {
+  getMyBankingDetails: () =>
+    api.get<EmployeeBankingDetails>("/salary-structures/me/banking"),
+
+  saveMyBankingDetails: (data: Omit<EmployeeBankingDetails, "submitted">) =>
+    api.put<EmployeeBankingDetails>("/salary-structures/me/banking", data),
+
   list: () =>
     api.get<{ data: EmployeeSalaryStructureRow[]; total: number }>("/salary-structures"),
 

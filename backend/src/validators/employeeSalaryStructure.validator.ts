@@ -49,6 +49,20 @@ const bankingInfoSchema = z.object({
   uanNumber: z.string().max(20).optional(),
 });
 
+export const employeeBankingDetailsSchema = z.object({
+  accountHolderName: z.string().trim().min(2).max(120),
+  bankName: z.string().trim().min(2).max(100),
+  accountNumber: z.string().trim().regex(/^\d{6,30}$/, 'Account number must contain 6 to 30 digits'),
+  ifscCode: z.string().trim().toUpperCase().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Enter a valid IFSC code'),
+  mobileNumber: z.string().trim().regex(/^\d{10,15}$/, 'Mobile number must contain 10 to 15 digits'),
+  branchName: z.string().trim().min(2).max(100),
+  panNumber: z.string().trim().toUpperCase().regex(/^[A-Z]{5}\d{4}[A-Z]$/, 'Enter a valid PAN number'),
+  uanNumber: z.union([
+    z.literal(''),
+    z.string().trim().regex(/^\d{12}$/, 'UAN number must contain 12 digits'),
+  ]),
+});
+
 export const previewEmployeeSalaryStructureSchema = previewInputSchema.extend({
   customComponents: z.array(customComponentSchema).optional(),
 });

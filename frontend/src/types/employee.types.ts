@@ -181,6 +181,18 @@ export interface SalaryDetailsRow {
   updatedAt: string;
 }
 
+export interface EmployeeBankingDetails {
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  mobileNumber: string;
+  branchName: string;
+  panNumber: string;
+  uanNumber: string;
+  submitted: boolean;
+}
+
 export interface ExistingDoc {
   id: string;
   fileName: string;

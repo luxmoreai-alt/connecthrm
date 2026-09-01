@@ -78,6 +78,11 @@ export class EmployeeController {
     ApiResponse.success(res, 'Onboarding link sent successfully', result);
   }
 
+  static async sendBankingDetailsLink(req: Request, res: Response): Promise<void> {
+    const result = await employeeService.sendBankingDetailsLink(req.params.id as string);
+    ApiResponse.success(res, 'Banking details link sent successfully', result);
+  }
+
   static async uploadPhoto(req: Request, res: Response): Promise<void> {
     const id = req.params.id as string;
     if (!req.file) {

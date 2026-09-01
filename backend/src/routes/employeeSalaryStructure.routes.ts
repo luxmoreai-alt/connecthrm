@@ -6,7 +6,12 @@ import { EmployeeSalaryStructureController } from '../controllers/employeeSalary
 
 const router = Router();
 
-router.use(authMiddleware, roleMiddleware('ADMIN'));
+router.use(authMiddleware);
+
+router.get('/me/banking', roleMiddleware('EMPLOYEE'), asyncHandler(EmployeeSalaryStructureController.getMyBankingDetails));
+router.put('/me/banking', roleMiddleware('EMPLOYEE'), asyncHandler(EmployeeSalaryStructureController.saveMyBankingDetails));
+
+router.use(roleMiddleware('ADMIN'));
 
 router.get('/', asyncHandler(EmployeeSalaryStructureController.list));
 router.get('/user/:userId', asyncHandler(EmployeeSalaryStructureController.getLatestByEmployee));

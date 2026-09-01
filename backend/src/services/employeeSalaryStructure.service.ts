@@ -47,6 +47,17 @@ interface SaveEmployeeSalaryStructureInput extends SalaryPreviewInput {
   };
 }
 
+interface EmployeeBankingDetailsInput {
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  mobileNumber: string;
+  branchName: string;
+  panNumber: string;
+  uanNumber: string;
+}
+
 interface EmployeeSalaryComputationResult extends SalaryComputationResult {
   earnings: CalculatedComponent[];
   deductions: CalculatedComponent[];
@@ -80,6 +91,58 @@ export class EmployeeSalaryStructureService {
     const row = await this.structureRepo.findLatestByEmployee(userId);
     if (!row) return null;
     return this.formatStructure(row);
+  }
+
+  async getBankingDetails(userId: string) {
+    const [structure, legacy] = await Promise.all([
+      this.structureRepo.findLatestByEmployee(userId),
+      this.salaryDetailsRepo.findByUserId(userId),
+    ]);
+    const banking = (structure?.bankingInfo || {}) as Record<string, unknown>;
+    return {
+      accountHolderName: String(banking.accountHolderName || legacy?.accountHolderName || ''),
+      bankName: String(banking.bankName || legacy?.bankName || ''),
+      accountNumber: String(banking.accountNumber || legacy?.accountNumber || ''),
+      ifscCode: String(banking.ifscCode || legacy?.ifscCode || ''),
+      mobileNumber: String(banking.mobileNumber || legacy?.bankMobileNumber || ''),
+      branchName: String(banking.branchName || legacy?.branchName || ''),
+      panNumber: String(banking.panNumber || legacy?.panNumber || ''),
+      uanNumber: String(banking.uanNumber || legacy?.uanNumber || ''),
+      submitted: Boolean(
+        (banking.accountNumber || legacy?.accountNumber)
+        && (banking.ifscCode || legacy?.ifscCode),
+      ),
+    };
+  }
+
+  async saveBankingDetails(userId: string, input: EmployeeBankingDetailsInput) {
+    const employee = await this.employeeRepo.findByUserId(userId);
+    if (!employee) throw ApiError.notFound('Employee not found', 'EMPLOYEE_NOT_FOUND');
+
+    const bankingInfo = {
+      accountHolderName: input.accountHolderName,
+      bankName: input.bankName,
+      accountNumber: input.accountNumber,
+      ifscCode: input.ifscCode,
+      mobileNumber: input.mobileNumber,
+      branchName: input.branchName,
+      panNumber: input.panNumber,
+      uanNumber: input.uanNumber,
+    };
+    const structure = await this.structureRepo.findLatestByEmployee(userId);
+    if (structure) await this.structureRepo.updateBankingInfo(structure.id, bankingInfo);
+
+    await this.salaryDetailsRepo.upsertByUserId(userId, {
+      accountHolderName: input.accountHolderName,
+      bankName: input.bankName,
+      accountNumber: input.accountNumber,
+      ifscCode: input.ifscCode,
+      bankMobileNumber: input.mobileNumber,
+      branchName: input.branchName,
+      panNumber: input.panNumber,
+      uanNumber: input.uanNumber || null,
+    });
+    return this.getBankingDetails(userId);
   }
 
   async preview(input: SaveEmployeeSalaryStructureInput): Promise<EmployeeSalaryComputationResult> {

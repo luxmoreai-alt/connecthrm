@@ -5,6 +5,7 @@ import { EmployeeSalaryStructureService } from '../services/employeeSalaryStruct
 import {
   previewEmployeeSalaryStructureSchema,
   saveEmployeeSalaryStructureSchema,
+  employeeBankingDetailsSchema,
 } from '../validators/employeeSalaryStructure.validator';
 import { NotificationService } from '../services/notification.service';
 
@@ -12,6 +13,29 @@ const service = new EmployeeSalaryStructureService();
 const notificationService = new NotificationService();
 
 export class EmployeeSalaryStructureController {
+  static async getMyBankingDetails(req: Request, res: Response): Promise<void> {
+    const result = await service.getBankingDetails(req.user!.userId);
+    ApiResponse.success(res, 'Banking details retrieved', result);
+  }
+
+  static async saveMyBankingDetails(req: Request, res: Response): Promise<void> {
+    const parsed = employeeBankingDetailsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const result = await service.saveBankingDetails(req.user!.userId, parsed.data);
+    await notificationService.notifyAdmins(
+      'BANKING_DETAILS_UPDATED',
+      'Employee banking details submitted',
+      'An employee submitted or updated their salary banking information.',
+      '/admin/employees/salary',
+    ).catch((err) => console.error('Failed to notify admins about banking details', err.message));
+    ApiResponse.success(res, 'Banking details saved successfully', result);
+  }
+
   static async list(_req: Request, res: Response): Promise<void> {
     const result = await service.listLatestStructures();
     ApiResponse.success(res, 'Employee salary structures retrieved', result);

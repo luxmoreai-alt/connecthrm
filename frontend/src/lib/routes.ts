@@ -51,6 +51,7 @@ export const adminRoutes: RouteItem[] = [
 export const employeeRoutes: RouteItem[] = [
   { label: "Dashboard", href: "/employee/dashboard", icon: LayoutDashboard },
   { label: "Personal Details", href: "/employee/personal-details", icon: ClipboardPenLine },
+  { label: "Banking Details", href: "/employee/banking-details", icon: Banknote },
   { label: "Attendance", href: "/employee/attendance", icon: CalendarCheck },
   { label: "Holiday Calendar", href: "/employee/holidays", icon: CalendarDays },
   { label: "Leave", href: "/employee/leave", icon: CalendarOff },

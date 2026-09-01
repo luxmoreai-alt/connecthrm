@@ -59,6 +59,10 @@ export class EmployeeSalaryStructureRepository {
     );
   }
 
+  async updateBankingInfo(id: string, bankingInfo: Record<string, unknown>): Promise<void> {
+    await this.structureRepo.update(id, { bankingInfo } as any);
+  }
+
   async saveStructureWithChildren(input: SaveStructureInput): Promise<EmployeeSalaryStructure> {
     return AppDataSource.transaction(async (manager) => {
       const structureRepo = manager.getRepository(EmployeeSalaryStructure);

@@ -25,8 +25,8 @@ import {
   useToast,
   VStack,
 } from "@chakra-ui/react";
-import { Edit2, Eye, Info, Lock, Plus, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
-import { salaryStructureApi, settingsApi } from "@/api";
+import { Edit2, Eye, Info, Lock, Mail, Plus, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
+import { employeeApi, salaryStructureApi, settingsApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import DataTable, { type Column } from "@/components/ui/DataTable";
@@ -483,6 +483,7 @@ function SalaryStructureForm({
   const [lastPreviewAt, setLastPreviewAt] = useState("");
   const [monthlyEdited, setMonthlyEdited] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sendingBankingLink, setSendingBankingLink] = useState(false);
   const previewSequenceRef = useRef(0);
 
   const activeComponents: SalaryTemplateComponent[] = useMemo(
@@ -818,6 +819,28 @@ function SalaryStructureForm({
     }
   };
 
+  const sendBankingDetailsLink = async () => {
+    if (!selectedUserId) {
+      toast({ title: "Select an employee first", status: "warning", duration: 2500, isClosable: true });
+      return;
+    }
+    try {
+      setSendingBankingLink(true);
+      const result = await employeeApi.sendBankingDetailsLink(selectedUserId);
+      toast({
+        title: "Banking details link sent",
+        description: `The secure form link was emailed to ${result.email}.`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (err: any) {
+      toast({ title: "Could not send banking link", description: err?.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setSendingBankingLink(false);
+    }
+  };
+
   if (loadingConfig) {
     return <Flex justify="center" py={12}><Spinner color="brand.400" /></Flex>;
   }
@@ -1140,9 +1163,20 @@ function SalaryStructureForm({
                     Add the selected employee&apos;s salary credit account information.
                   </Text>
                 </Box>
-                <SecondaryButton size="xs" onClick={() => setShowBankingInfo((prev) => !prev)}>
-                  {showBankingInfo ? "Hide" : "Show"}
-                </SecondaryButton>
+                <HStack spacing={2}>
+                  <SecondaryButton
+                    size="xs"
+                    leftIcon={<Mail size={13} />}
+                    onClick={sendBankingDetailsLink}
+                    isLoading={sendingBankingLink}
+                    isDisabled={!selectedUserId}
+                  >
+                    Send employee link
+                  </SecondaryButton>
+                  <SecondaryButton size="xs" onClick={() => setShowBankingInfo((prev) => !prev)}>
+                    {showBankingInfo ? "Hide" : "Show"}
+                  </SecondaryButton>
+                </HStack>
               </Flex>
               {showBankingInfo ? (
                 <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mt={3}>

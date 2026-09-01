@@ -406,6 +406,20 @@ export class EmployeeService {
     return { email: profile.user.email, sent: true };
   }
 
+  async sendBankingDetailsLink(id: string) {
+    const profile = await this.employeeRepo.findById(id) ?? await this.employeeRepo.findByUserId(id);
+    if (!profile || profile.user.deletedAt) {
+      throw ApiError.notFound('Employee not found', 'EMPLOYEE_NOT_FOUND');
+    }
+
+    await this.emailService.sendBankingDetailsLink(
+      profile.user.email,
+      profile.user.firstName,
+      profile.user.empId || '',
+    );
+    return { email: profile.user.email, sent: true };
+  }
+
   async updateProfilePhoto(id: string, file: Express.Multer.File) {
     const profile = await this.employeeRepo.findById(id);
     if (!profile || profile.user.deletedAt) {

@@ -197,4 +197,28 @@ export class EmailService {
       attachments: [branding.attachment],
     });
   }
+
+  async sendBankingDetailsLink(
+    email: string,
+    firstName: string,
+    empId: string,
+  ): Promise<void> {
+    const branding = await this.getBranding();
+    const bankingUrl = `${env.APP_URL}/employee/banking-details`;
+    const html = this.loadTemplate('bankingDetailsRequest', {
+      ...branding.variables,
+      firstName,
+      empId,
+      bankingUrl,
+      loginUrl: `${env.APP_URL}/login?next=${encodeURIComponent('/employee/banking-details')}`,
+      year: new Date().getFullYear().toString(),
+    });
+
+    await this.sendMail({
+      to: email,
+      subject: 'Action required - Add your salary banking details',
+      html,
+      attachments: [branding.attachment],
+    });
+  }
 }
