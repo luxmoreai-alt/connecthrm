@@ -1438,6 +1438,7 @@ export default function SalaryBankingPage() {
   const [search, setSearch] = useState("");
   const [editRow, setEditRow] = useState<EmployeeSalaryStructureRow | null>(null);
   const [viewRow, setViewRow] = useState<EmployeeSalaryStructureRow | null>(null);
+  const [sendingLinkEmployeeId, setSendingLinkEmployeeId] = useState<string | null>(null);
 
   const fetchRows = useCallback(async () => {
     try {
@@ -1460,6 +1461,24 @@ export default function SalaryBankingPage() {
     return row.employeeName.toLowerCase().includes(q) || row.employeeCode.toLowerCase().includes(q) || row.email.toLowerCase().includes(q) || row.appliedTemplateName.toLowerCase().includes(q);
   });
 
+  const sendRowBankingLink = async (row: EmployeeSalaryStructureRow) => {
+    try {
+      setSendingLinkEmployeeId(row.employeeId);
+      const result = await employeeApi.sendBankingDetailsLink(row.employeeId);
+      toast({
+        title: "Banking details link sent",
+        description: `The secure form link was emailed to ${result.email}.`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (err: any) {
+      toast({ title: "Could not send banking link", description: err?.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setSendingLinkEmployeeId(null);
+    }
+  };
+
   const columns: Column<EmployeeSalaryStructureRow>[] = [
     { key: "employeeCode", header: "Emp ID", width: "110px", render: (row) => <Text fontSize="sm" fontWeight="700" color="brand.500">{row.employeeCode}</Text> },
     { key: "employeeName", header: "Employee", render: (row) => <Box><Text fontSize="sm" fontWeight="600">{row.employeeName}</Text><Text fontSize="xs" color="text.muted">{row.email}</Text></Box> },
@@ -1467,7 +1486,7 @@ export default function SalaryBankingPage() {
     { key: "monthlyCtc", header: "Monthly CTC", render: (row) => <Text fontSize="sm">{formatCurrency(row.monthlyCtc)}</Text> },
     { key: "netPay", header: "Net Pay", render: (row) => <Text fontSize="sm" fontWeight="700" color="green.600">{formatCurrency(Number(row.summary?.netPay || 0))}</Text> },
     { key: "employerCost", header: "Employer Cost", render: (row) => <Text fontSize="sm" fontWeight="700" color="blue.600">{formatCurrency(Number(row.summary?.employerCostImpact || 0))}</Text> },
-    { key: "actions", header: "Actions", width: "110px", render: (row) => <HStack spacing={1}><IconButton aria-label="view" icon={<Eye size={16} />} size="sm" variant="ghost" onClick={() => { setViewRow(row); viewModal.onOpen(); }} /><IconButton aria-label="edit" icon={<Edit2 size={16} />} size="sm" variant="ghost" onClick={() => { setEditRow(row); setView("edit"); }} /></HStack> },
+    { key: "actions", header: "Actions", width: "150px", render: (row) => <HStack spacing={1}><IconButton aria-label="View salary structure" title="View salary structure" icon={<Eye size={16} />} size="sm" variant="ghost" onClick={() => { setViewRow(row); viewModal.onOpen(); }} /><IconButton aria-label="Edit salary structure" title="Edit salary structure" icon={<Edit2 size={16} />} size="sm" variant="ghost" onClick={() => { setEditRow(row); setView("edit"); }} /><IconButton aria-label="Send banking details link" title="Send banking details link" icon={sendingLinkEmployeeId === row.employeeId ? <Spinner size="xs" /> : <Mail size={16} />} size="sm" variant="ghost" colorScheme="blue" isDisabled={sendingLinkEmployeeId !== null} onClick={() => { void sendRowBankingLink(row); }} /></HStack> },
   ];
 
   if (view === "add") {
