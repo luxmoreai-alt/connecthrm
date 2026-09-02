@@ -337,6 +337,71 @@ export class EmployeeService {
     return updated;
   }
 
+  async provisionOfferAccess(input: CreateEmployeeInput) {
+    if (!this.emailService.isConfigured()) {
+      throw ApiError.internal(
+        'HRMS email is not configured. Add the SMTP environment variables before sending employee access',
+        'EMPLOYEE_EMAIL_NOT_CONFIGURED',
+      );
+    }
+    const email = input.email.trim().toLowerCase();
+    const empId = input.empId.trim().toUpperCase();
+    const [existingEmail, existingEmpId] = await Promise.all([
+      this.userRepo.findByEmail(email),
+      this.userRepo.findByEmpId(empId),
+    ]);
+
+    if (!existingEmail && !existingEmpId) {
+      const created = await this.createEmployee({ ...input, email, empId });
+      if (!created.emailSent) {
+        throw ApiError.internal(
+          `The HRMS account was created, but its credentials email failed: ${created.emailError || 'SMTP delivery failed'}`,
+          'EMPLOYEE_CREDENTIALS_EMAIL_FAILED',
+        );
+      }
+      return {
+        created: true,
+        empId: created.empId,
+        email,
+        emailSent: true,
+        profileId: created.profile.id,
+      };
+    }
+
+    if (!existingEmail || !existingEmpId || existingEmail.id !== existingEmpId.id) {
+      throw ApiError.conflict(
+        'The employee email or employee ID is already assigned to another HRMS account',
+        'EMPLOYEE_INTEGRATION_CONFLICT',
+      );
+    }
+    if (existingEmail.deletedAt) {
+      throw ApiError.conflict('The matching HRMS employee is archived', 'EMPLOYEE_ARCHIVED');
+    }
+
+    const profile = await this.employeeRepo.findByUserId(existingEmail.id);
+    if (!profile) {
+      throw ApiError.conflict('The matching HRMS account has no employee profile', 'EMPLOYEE_PROFILE_MISSING');
+    }
+    if (profile.employmentStatus === 'OFFBOARDED') {
+      throw ApiError.conflict('The matching HRMS employee is offboarded', 'EMPLOYEE_OFFBOARDED');
+    }
+
+    const generatedPassword = this.generatePassword();
+    await this.userRepo.update(existingEmail.id, {
+      password: await hashPassword(generatedPassword),
+      isActive: true,
+    });
+    await this.emailService.sendCredentials(email, empId, generatedPassword, input.firstName);
+
+    return {
+      created: false,
+      empId,
+      email,
+      emailSent: true,
+      profileId: profile.id,
+    };
+  }
+
   async offboardEmployee(id: string, input: OffboardEmployeeInput) {
     const profile = await this.employeeRepo.findById(id);
     if (!profile || profile.user.deletedAt) {

@@ -33,6 +33,7 @@ SMTP_PASS=your-google-app-password
 SMTP_FROM=your-email@gmail.com
 SMTP_FROM_NAME=Connect HR
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
+OFFER_SYNC_TOKEN=SAME_LONG_RANDOM_TOKEN_USED_AS_HRMS_SYNC_TOKEN_IN_OFFER_STUDIO
 ```
 
 Do not add `PORT`; Vercel controls the function port. Generate new JWT secrets for production rather than copying development values. `ADMIN_PASSWORD` is used only when the configured admin does not already exist.

@@ -403,6 +403,13 @@ function ViewModal({
   onClose: () => void;
 }) {
   if (!row) return null;
+  const banking = row.bankingInfo || {};
+  const hasBankingDetails = Boolean(
+    banking.accountHolderName
+    || banking.bankName
+    || banking.accountNumber
+    || banking.ifscCode,
+  );
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
       <ModalOverlay />
@@ -442,6 +449,38 @@ function ViewModal({
               ))}
             </Box>
           </SimpleGrid>
+
+          <Divider my={4} />
+
+          <Box>
+            <Flex justify="space-between" align="center" mb={3}>
+              <Text fontSize="sm" fontWeight="700">Employee Banking Details</Text>
+              <Badge colorScheme={hasBankingDetails ? "green" : "orange"} textTransform="none">
+                {hasBankingDetails ? "Submitted" : "Not submitted"}
+              </Badge>
+            </Flex>
+            {hasBankingDetails ? (
+              <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={3}>
+                {[
+                  ["Account Holder", banking.accountHolderName],
+                  ["Bank Name", banking.bankName],
+                  ["Account Number", banking.accountNumber],
+                  ["IFSC Code", banking.ifscCode],
+                  ["Banking Mobile", banking.mobileNumber],
+                  ["Branch Name", banking.branchName],
+                  ["PAN Number", banking.panNumber],
+                  ["UAN Number", banking.uanNumber],
+                ].map(([label, value]) => (
+                  <Box key={label} border="1px solid" borderColor="surface.border" borderRadius="lg" p={3} bg="surface.bg">
+                    <Text fontSize="xs" color="text.muted">{label}</Text>
+                    <Text fontSize="sm" fontWeight="700" color="text.heading" mt={1}>{value || "—"}</Text>
+                  </Box>
+                ))}
+              </SimpleGrid>
+            ) : (
+              <Text fontSize="sm" color="text.muted">The employee has not submitted banking details yet.</Text>
+            )}
+          </Box>
         </ModalBody>
       </ModalContent>
     </Modal>

@@ -102,6 +102,7 @@ const envSchema = z.object({
   VAPID_PUBLIC_KEY: optionalString,
   VAPID_PRIVATE_KEY: optionalString,
   VAPID_SUBJECT: optionalString,
+  OFFER_SYNC_TOKEN: optionalString,
 });
 
 const parsed = envSchema.safeParse(process.env);
