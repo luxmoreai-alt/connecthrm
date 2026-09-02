@@ -1,6 +1,7 @@
 import { PersonalDetailsRepository } from '../repositories/personalDetails.repository';
 import { EmployeeRepository } from '../repositories/employee.repository';
 import { ApiError } from '../utils/apiError';
+import { OfferStudioService } from './offerStudio.service';
 
 interface PersonalDetailsInput {
   aadhaarNumber?: string;
@@ -39,10 +40,12 @@ interface PersonalDetailsInput {
 export class PersonalDetailsService {
   private personalRepo: PersonalDetailsRepository;
   private employeeRepo: EmployeeRepository;
+  private offerStudioService: OfferStudioService;
 
   constructor() {
     this.personalRepo = new PersonalDetailsRepository();
     this.employeeRepo = new EmployeeRepository();
+    this.offerStudioService = new OfferStudioService();
   }
 
   async listAll() {
@@ -108,7 +111,11 @@ export class PersonalDetailsService {
       previousCompanyCTC: input.previousCompanyCTC || null,
     });
 
-    return this.formatRecord(record);
+    const appointmentSync = await this.offerStudioService.syncAppointmentDraft(profile, record);
+    if (!appointmentSync.ok && !appointmentSync.skipped) {
+      console.error('Appointment draft sync failed:', appointmentSync.error);
+    }
+    return { ...this.formatRecord(record), appointmentSync };
   }
 
   async updateById(id: string, input: PersonalDetailsInput) {
@@ -151,7 +158,18 @@ export class PersonalDetailsService {
       previousCompanyCTC: input.previousCompanyCTC || null,
     });
 
-    return this.getById(id);
+    const record = await this.personalRepo.findById(id);
+    if (!record) {
+      throw ApiError.notFound('Personal details not found after update', 'PERSONAL_NOT_FOUND');
+    }
+    const profile = await this.employeeRepo.findByUserId(record.userId);
+    const appointmentSync = profile
+      ? await this.offerStudioService.syncAppointmentDraft(profile, record)
+      : { ok: false, skipped: true, error: 'Employee profile was not found.' };
+    if (!appointmentSync.ok && !appointmentSync.skipped) {
+      console.error('Appointment draft sync failed:', appointmentSync.error);
+    }
+    return { ...this.formatRecord(record), appointmentSync };
   }
 
   private formatRecord(r: any) {

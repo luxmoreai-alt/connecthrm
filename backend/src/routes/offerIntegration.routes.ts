@@ -20,6 +20,8 @@ const accessSchema = z.object({
   dateOfJoining: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reportingManager: z.string().trim().min(1).max(200),
   shiftSchedule: z.string().trim().min(1).max(100),
+  photoData: z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/).max(2_800_000).optional().or(z.literal('')),
+  photoOnly: z.boolean().optional().default(false),
 });
 
 const tokensMatch = (supplied: unknown): boolean => {
@@ -41,7 +43,7 @@ router.post('/access', asyncHandler(async (req, res) => {
     return ApiResponse.error(res, message, 'VALIDATION_ERROR', 400);
   }
 
-  const result = await employeeService.provisionOfferAccess({
+  const employee = {
     empId: parsed.data.employeeId,
     firstName: parsed.data.firstName,
     lastName: parsed.data.lastName,
@@ -53,9 +55,15 @@ router.post('/access', asyncHandler(async (req, res) => {
     reportingManager: parsed.data.reportingManager,
     shiftSchedule: parsed.data.shiftSchedule,
     allowLoginOnlyInsideOffice: false,
-  });
+  };
+  const result = parsed.data.photoOnly
+    ? await employeeService.syncOfferProfilePhoto(employee.empId, employee.email, parsed.data.photoData || '')
+    : await employeeService.provisionOfferAccess(employee, parsed.data.photoData || undefined);
 
-  return ApiResponse.success(res, result.created ? 'HRMS access created and emailed' : 'HRMS access refreshed and emailed', result, result.created ? 201 : 200);
+  const message = parsed.data.photoOnly
+    ? 'HRMS employee photo synchronized'
+    : result.created ? 'HRMS access created and emailed' : 'HRMS access refreshed and emailed';
+  return ApiResponse.success(res, message, result, result.created ? 201 : 200);
 }));
 
 export default router;

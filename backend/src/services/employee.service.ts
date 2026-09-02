@@ -78,7 +78,50 @@ export class EmployeeService {
     return `Emp@${result}`;
   }
 
-  async createEmployee(input: CreateEmployeeInput) {
+  private async saveIntegratedProfilePhoto(userId: string, previousPhoto: string | null | undefined, photoData: string): Promise<string> {
+    const match = photoData.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) {
+      throw ApiError.badRequest('The Offer Studio profile photo is invalid', 'EMPLOYEE_PHOTO_INVALID');
+    }
+    const mimeType = `image/${match[1]}`;
+    const extension = match[1] === 'jpeg' ? '.jpg' : `.${match[1]}`;
+    const contents = Buffer.from(match[2], 'base64');
+    if (!contents.length || contents.length > 2 * 1024 * 1024) {
+      throw ApiError.badRequest('The Offer Studio profile photo must be smaller than 2 MB', 'EMPLOYEE_PHOTO_TOO_LARGE');
+    }
+
+    let profilePhotoUrl: string;
+    if (process.env.VERCEL) {
+      if (!process.env.BLOB_READ_WRITE_TOKEN) {
+        throw ApiError.internal(
+          'HRMS profile photo storage is not configured. Add BLOB_READ_WRITE_TOKEN in Vercel',
+          'BLOB_STORAGE_NOT_CONFIGURED',
+        );
+      }
+      const blob = await put(
+        `profile-photos/${userId}/${randomUUID()}${extension}`,
+        contents,
+        { access: 'public', contentType: mimeType, addRandomSuffix: false },
+      );
+      profilePhotoUrl = blob.url;
+    } else {
+      const photoDirectory = getUploadPath('profile-photos');
+      fs.mkdirSync(photoDirectory, { recursive: true });
+      const fileName = `${randomUUID()}${extension}`;
+      fs.writeFileSync(path.join(photoDirectory, fileName), contents);
+      profilePhotoUrl = `/uploads/profile-photos/${fileName}`;
+    }
+
+    await this.userRepo.update(userId, { profilePhotoUrl });
+    if (previousPhoto?.includes('.blob.vercel-storage.com/') && process.env.BLOB_READ_WRITE_TOKEN) {
+      await del(previousPhoto).catch(() => undefined);
+    } else if (previousPhoto?.startsWith('/uploads/profile-photos/')) {
+      fs.unlink(getUploadPath('profile-photos', path.basename(previousPhoto)), () => undefined);
+    }
+    return profilePhotoUrl;
+  }
+
+  async createEmployee(input: CreateEmployeeInput, photoData?: string) {
     const empId = input.empId.trim().toUpperCase();
     const [existingEmail, existingEmpId] = await Promise.all([
       this.userRepo.findByEmail(input.email),
@@ -137,6 +180,8 @@ export class EmployeeService {
       reportingManager: input.reportingManager,
       shiftSchedule: input.shiftSchedule,
     });
+
+    if (photoData) await this.saveIntegratedProfilePhoto(user.id, user.profilePhotoUrl, photoData);
 
     // Await delivery because Vercel may pause background work after responding.
     let emailSent = false;
@@ -337,7 +382,7 @@ export class EmployeeService {
     return updated;
   }
 
-  async provisionOfferAccess(input: CreateEmployeeInput) {
+  async provisionOfferAccess(input: CreateEmployeeInput, photoData?: string) {
     if (!this.emailService.isConfigured()) {
       throw ApiError.internal(
         'HRMS email is not configured. Add the SMTP environment variables before sending employee access',
@@ -352,7 +397,7 @@ export class EmployeeService {
     ]);
 
     if (!existingEmail && !existingEmpId) {
-      const created = await this.createEmployee({ ...input, email, empId });
+      const created = await this.createEmployee({ ...input, email, empId }, photoData);
       if (!created.emailSent) {
         throw ApiError.internal(
           `The HRMS account was created, but its credentials email failed: ${created.emailError || 'SMTP delivery failed'}`,
@@ -365,6 +410,7 @@ export class EmployeeService {
         email,
         emailSent: true,
         profileId: created.profile.id,
+        photoSynced: Boolean(photoData),
       };
     }
 
@@ -386,6 +432,8 @@ export class EmployeeService {
       throw ApiError.conflict('The matching HRMS employee is offboarded', 'EMPLOYEE_OFFBOARDED');
     }
 
+    if (photoData) await this.saveIntegratedProfilePhoto(existingEmail.id, existingEmail.profilePhotoUrl, photoData);
+
     const generatedPassword = this.generatePassword();
     await this.userRepo.update(existingEmail.id, {
       password: await hashPassword(generatedPassword),
@@ -399,7 +447,29 @@ export class EmployeeService {
       email,
       emailSent: true,
       profileId: profile.id,
+      photoSynced: Boolean(photoData),
     };
+  }
+
+  async syncOfferProfilePhoto(empIdValue: string, emailValue: string, photoData: string) {
+    if (!photoData) {
+      throw ApiError.badRequest('Offer Studio did not provide an employee photo', 'EMPLOYEE_PHOTO_REQUIRED');
+    }
+    const empId = empIdValue.trim().toUpperCase();
+    const email = emailValue.trim().toLowerCase();
+    const [employeeById, employeeByEmail] = await Promise.all([
+      this.userRepo.findByEmpId(empId),
+      this.userRepo.findByEmail(email),
+    ]);
+    if (!employeeById || !employeeByEmail || employeeById.id !== employeeByEmail.id || employeeById.deletedAt) {
+      throw ApiError.conflict('A matching active HRMS employee was not found', 'EMPLOYEE_INTEGRATION_CONFLICT');
+    }
+    const profile = await this.employeeRepo.findByUserId(employeeById.id);
+    if (!profile || profile.employmentStatus === 'OFFBOARDED') {
+      throw ApiError.conflict('A matching active HRMS employee profile was not found', 'EMPLOYEE_PROFILE_MISSING');
+    }
+    await this.saveIntegratedProfilePhoto(employeeById.id, employeeById.profilePhotoUrl, photoData);
+    return { created: false, empId, email, emailSent: false, profileId: profile.id, photoSynced: true };
   }
 
   async offboardEmployee(id: string, input: OffboardEmployeeInput) {

@@ -121,6 +121,14 @@ export interface PersonalDetailsRow extends PersonalForm {
   email: string;
   createdAt: string;
   updatedAt: string;
+  appointmentSync?: {
+    ok: boolean;
+    skipped?: boolean;
+    created?: boolean;
+    locked?: boolean;
+    appointmentId?: string;
+    error?: string;
+  };
 }
 
 export interface SalaryComponentForm {

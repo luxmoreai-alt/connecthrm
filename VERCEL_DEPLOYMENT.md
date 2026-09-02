@@ -33,6 +33,7 @@ SMTP_PASS=your-google-app-password
 SMTP_FROM=your-email@gmail.com
 SMTP_FROM_NAME=Connect HR
 BLOB_READ_WRITE_TOKEN=vercel_blob_rw_...
+OFFER_APP_URL=https://offer-backend-seven.vercel.app
 OFFER_SYNC_TOKEN=SAME_LONG_RANDOM_TOKEN_USED_AS_HRMS_SYNC_TOKEN_IN_OFFER_STUDIO
 ```
 

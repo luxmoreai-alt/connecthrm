@@ -53,7 +53,15 @@ export default function EmployeePersonalDetailsPage() {
       const saved = await personalDetailsApi.saveMe(form);
       setForm(saved);
       setCompleted(true);
-      toast({ title: "Personal details saved", description: "Your HR profile has been updated successfully.", status: "success" });
+      const sync = saved.appointmentSync;
+      const description = sync?.ok && !sync.skipped
+        ? sync.locked
+          ? "Your HR profile was updated. The appointment already sent by HR was left unchanged."
+          : `Your HR profile was updated and your appointment-letter draft was ${sync.created ? "created" : "refreshed"} for HR.`
+        : sync?.error
+          ? `Your HR profile was updated. Appointment draft: ${sync.error}`
+          : "Your HR profile has been updated successfully.";
+      toast({ title: "Personal details saved", description, status: sync && !sync.ok && !sync.skipped ? "warning" : "success" });
     } catch (error: any) {
       toast({ title: "Could not save personal details", description: error?.message, status: "error" });
     } finally {
