@@ -484,6 +484,7 @@ function SalaryStructureForm({
   const [monthlyEdited, setMonthlyEdited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingBankingLink, setSendingBankingLink] = useState(false);
+  const [refreshingBanking, setRefreshingBanking] = useState(false);
   const previewSequenceRef = useRef(0);
 
   const activeComponents: SalaryTemplateComponent[] = useMemo(
@@ -521,7 +522,10 @@ function SalaryStructureForm({
     const loadExisting = async () => {
       try {
         setLoadingExisting(true);
-        const row = await salaryStructureApi.getByUserId(selectedUserId);
+        const [row, submittedBanking] = await Promise.all([
+          salaryStructureApi.getByUserId(selectedUserId),
+          salaryStructureApi.getBankingDetailsByUserId(selectedUserId),
+        ]);
         if (cancelled) return;
         const baseStates: Record<string, boolean> = {};
         for (const c of activeComponents) baseStates[c.componentCode] = c.defaultEnabled;
@@ -539,7 +543,16 @@ function SalaryStructureForm({
           setComponentOverrideEnabled({});
           setCustomComponents([]);
           setShowCustomComponents(false);
-          setBanking(emptyBanking);
+          setBanking({
+            accountHolderName: submittedBanking.accountHolderName,
+            bankName: submittedBanking.bankName,
+            accountNumber: submittedBanking.accountNumber,
+            ifscCode: submittedBanking.ifscCode,
+            mobileNumber: submittedBanking.mobileNumber,
+            branchName: submittedBanking.branchName,
+            panNumber: submittedBanking.panNumber,
+            uanNumber: submittedBanking.uanNumber,
+          });
           setShowBankingInfo(true);
           setPreview(null);
           setAutoPreviewError(null);
@@ -587,14 +600,14 @@ function SalaryStructureForm({
             || row.deductions.some((i) => i.sourceType === "EMPLOYEE_CUSTOM"),
         );
         setBanking({
-          accountHolderName: row.bankingInfo?.accountHolderName || "",
-          bankName: row.bankingInfo?.bankName || "",
-          accountNumber: row.bankingInfo?.accountNumber || "",
-          ifscCode: row.bankingInfo?.ifscCode || "",
-          mobileNumber: row.bankingInfo?.mobileNumber || "",
-          branchName: row.bankingInfo?.branchName || "",
-          panNumber: row.bankingInfo?.panNumber || "",
-          uanNumber: row.bankingInfo?.uanNumber || "",
+          accountHolderName: submittedBanking.accountHolderName,
+          bankName: submittedBanking.bankName,
+          accountNumber: submittedBanking.accountNumber,
+          ifscCode: submittedBanking.ifscCode,
+          mobileNumber: submittedBanking.mobileNumber,
+          branchName: submittedBanking.branchName,
+          panNumber: submittedBanking.panNumber,
+          uanNumber: submittedBanking.uanNumber,
         });
         setShowBankingInfo(true);
       } finally {
@@ -838,6 +851,34 @@ function SalaryStructureForm({
       toast({ title: "Could not send banking link", description: err?.message, status: "error", duration: 3500, isClosable: true });
     } finally {
       setSendingBankingLink(false);
+    }
+  };
+
+  const refreshBankingDetails = async () => {
+    if (!selectedUserId) return;
+    try {
+      setRefreshingBanking(true);
+      const details = await salaryStructureApi.getBankingDetailsByUserId(selectedUserId);
+      setBanking({
+        accountHolderName: details.accountHolderName,
+        bankName: details.bankName,
+        accountNumber: details.accountNumber,
+        ifscCode: details.ifscCode,
+        mobileNumber: details.mobileNumber,
+        branchName: details.branchName,
+        panNumber: details.panNumber,
+        uanNumber: details.uanNumber,
+      });
+      toast({
+        title: details.submitted ? "Employee banking details loaded" : "Banking details not submitted yet",
+        status: details.submitted ? "success" : "info",
+        duration: 2500,
+        isClosable: true,
+      });
+    } catch (err: any) {
+      toast({ title: "Could not refresh banking details", description: err?.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setRefreshingBanking(false);
     }
   };
 
@@ -1172,6 +1213,15 @@ function SalaryStructureForm({
                     isDisabled={!selectedUserId}
                   >
                     Send employee link
+                  </SecondaryButton>
+                  <SecondaryButton
+                    size="xs"
+                    leftIcon={<RefreshCw size={13} />}
+                    onClick={refreshBankingDetails}
+                    isLoading={refreshingBanking}
+                    isDisabled={!selectedUserId}
+                  >
+                    Refresh details
                   </SecondaryButton>
                   <SecondaryButton size="xs" onClick={() => setShowBankingInfo((prev) => !prev)}>
                     {showBankingInfo ? "Hide" : "Show"}

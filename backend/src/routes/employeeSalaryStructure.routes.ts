@@ -14,6 +14,7 @@ router.put('/me/banking', roleMiddleware('EMPLOYEE'), asyncHandler(EmployeeSalar
 router.use(roleMiddleware('ADMIN'));
 
 router.get('/', asyncHandler(EmployeeSalaryStructureController.list));
+router.get('/user/:userId/banking', asyncHandler(EmployeeSalaryStructureController.getBankingDetailsByEmployee));
 router.get('/user/:userId', asyncHandler(EmployeeSalaryStructureController.getLatestByEmployee));
 router.post('/preview', asyncHandler(EmployeeSalaryStructureController.preview));
 router.put('/user/:userId', asyncHandler(EmployeeSalaryStructureController.save));

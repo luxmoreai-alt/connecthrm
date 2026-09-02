@@ -47,6 +47,11 @@ export class EmployeeSalaryStructureController {
     ApiResponse.success(res, 'Employee salary structure retrieved', result);
   }
 
+  static async getBankingDetailsByEmployee(req: Request, res: Response): Promise<void> {
+    const result = await service.getBankingDetails(req.params.userId as string);
+    ApiResponse.success(res, 'Employee banking details retrieved', result);
+  }
+
   static async preview(req: Request, res: Response): Promise<void> {
     const parsed = previewEmployeeSalaryStructureSchema.safeParse(req.body);
     if (!parsed.success) {

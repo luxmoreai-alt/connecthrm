@@ -117,6 +117,9 @@ export const salaryStructureApi = {
   getByUserId: (userId: string) =>
     api.get<EmployeeSalaryStructureRow | null>(`/salary-structures/user/${userId}`),
 
+  getBankingDetailsByUserId: (userId: string) =>
+    api.get<EmployeeBankingDetails>(`/salary-structures/user/${userId}/banking`),
+
   preview: (payload: SaveEmployeeSalaryStructureInput) =>
     api.post<SalaryComputation>("/salary-structures/preview", payload),
 
