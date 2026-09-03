@@ -9,6 +9,7 @@ import {
 import { ApiError } from '../utils/apiError';
 import { AppDataSource } from '../config/database';
 import { HrPortalAccess } from '../entities/HrPortalAccess.entity';
+import { assertEmployeeJoiningDateReached } from '../utils/joiningAccess';
 
 export class TokenService {
   private tokenRepo: TokenRepository;
@@ -89,6 +90,7 @@ export class TokenService {
         await this.tokenRepo.revokeAllUserTokens(user.id);
         throw ApiError.unauthorized('HR portal access has been revoked', 'AUTH_HR_ACCESS_REVOKED');
       }
+      await assertEmployeeJoiningDateReached(user.id);
       return this.generateTokenPair({
         id: user.id,
         email: grant.loginEmail,
@@ -96,6 +98,7 @@ export class TokenService {
         accessGrantId: grant.id,
       });
     }
+    if (user.role === 'EMPLOYEE') await assertEmployeeJoiningDateReached(user.id);
     return this.generateTokenPair({ id: user.id, email: user.email, role: user.role });
   }
 

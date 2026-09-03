@@ -7,6 +7,7 @@ import { env } from '../config/env';
 import { User, UserRole } from '../entities/User.entity';
 import { AppDataSource } from '../config/database';
 import { HrPortalAccess } from '../entities/HrPortalAccess.entity';
+import { assertEmployeeJoiningDateReached } from '../utils/joiningAccess';
 
 interface LoginInput {
   email: string;
@@ -39,6 +40,7 @@ export class AuthService {
       if (!(await comparePassword(password, grant.passwordHash))) {
         throw ApiError.unauthorized('Invalid HR portal credentials', 'AUTH_INVALID_CREDENTIALS');
       }
+      await assertEmployeeJoiningDateReached(grant.employee.id);
       const tokens = await this.tokenService.generateTokenPair({
         id: grant.employee.id,
         email: grant.loginEmail,
@@ -108,6 +110,9 @@ export class AuthService {
     // 3. Check active status
     if (!user.isActive) {
       throw ApiError.forbidden('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+    }
+    if (user.role === UserRole.EMPLOYEE) {
+      await assertEmployeeJoiningDateReached(user.id);
     }
 
     // 4. Validate location if required

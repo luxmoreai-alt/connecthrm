@@ -115,6 +115,8 @@ export class EmailService {
     empId: string,
     password: string,
     firstName: string,
+    joiningDate = '',
+    additionalMessage = '',
   ): Promise<void> {
     const branding = await this.getBranding();
     const subject = 'Welcome to Connect HR - Your account is ready';
@@ -127,6 +129,8 @@ export class EmailService {
       loginUrl: `${env.APP_URL}/login`,
       appUrl: env.APP_URL,
       personalDetailsUrl: `${env.APP_URL}/employee/personal-details`,
+      joiningDate: joiningDate || 'your confirmed joining date',
+      additionalMessage: additionalMessage.trim() || 'Please keep these credentials safely and sign in on or after your joining date.',
       year: new Date().getFullYear().toString(),
     });
 

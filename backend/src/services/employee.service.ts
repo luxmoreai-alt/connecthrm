@@ -121,7 +121,7 @@ export class EmployeeService {
     return profilePhotoUrl;
   }
 
-  async createEmployee(input: CreateEmployeeInput, photoData?: string) {
+  async createEmployee(input: CreateEmployeeInput, photoData?: string, additionalMessage = '') {
     const empId = input.empId.trim().toUpperCase();
     const [existingEmail, existingEmpId] = await Promise.all([
       this.userRepo.findByEmail(input.email),
@@ -192,6 +192,8 @@ export class EmployeeService {
         empId,
         generatedPassword,
         input.firstName,
+        input.dateOfJoining,
+        additionalMessage,
       );
       emailSent = true;
     } catch (error) {
@@ -382,7 +384,7 @@ export class EmployeeService {
     return updated;
   }
 
-  async provisionOfferAccess(input: CreateEmployeeInput, photoData?: string) {
+  async provisionOfferAccess(input: CreateEmployeeInput, photoData?: string, additionalMessage = '') {
     if (!this.emailService.isConfigured()) {
       throw ApiError.internal(
         'HRMS email is not configured. Add the SMTP environment variables before sending employee access',
@@ -397,7 +399,7 @@ export class EmployeeService {
     ]);
 
     if (!existingEmail && !existingEmpId) {
-      const created = await this.createEmployee({ ...input, email, empId }, photoData);
+      const created = await this.createEmployee({ ...input, email, empId }, photoData, additionalMessage);
       if (!created.emailSent) {
         throw ApiError.internal(
           `The HRMS account was created, but its credentials email failed: ${created.emailError || 'SMTP delivery failed'}`,
@@ -434,12 +436,22 @@ export class EmployeeService {
 
     if (photoData) await this.saveIntegratedProfilePhoto(existingEmail.id, existingEmail.profilePhotoUrl, photoData);
 
+    await this.employeeRepo.update(profile.id, {
+      department: input.department,
+      designation: input.designation,
+      employmentType: input.employmentType,
+      dateOfJoining: input.dateOfJoining,
+      reportingManager: input.reportingManager,
+      shiftSchedule: input.shiftSchedule,
+    });
+
     const generatedPassword = this.generatePassword();
     await this.userRepo.update(existingEmail.id, {
       password: await hashPassword(generatedPassword),
       isActive: true,
     });
-    await this.emailService.sendCredentials(email, empId, generatedPassword, input.firstName);
+    await this.tokenService.revokeAllUserTokens(existingEmail.id);
+    await this.emailService.sendCredentials(email, empId, generatedPassword, input.firstName, input.dateOfJoining, additionalMessage);
 
     return {
       created: false,

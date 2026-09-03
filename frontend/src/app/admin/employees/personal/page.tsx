@@ -253,8 +253,22 @@ function PersonalForm_({
     }
     try {
       setSaving(true);
-      await personalDetailsApi.save(selectedUserId, form);
-      toast({ title: `Personal details ${isEditMode ? "updated" : "saved"}`, status: "success", duration: 3000, isClosable: true });
+      const saved = await personalDetailsApi.save(selectedUserId, form);
+      const sync = saved.appointmentSync;
+      const description = sync?.ok && !sync.skipped
+        ? sync.locked
+          ? "The appointment was already mailed, so HRMS did not change it."
+          : `The appointment-letter draft was ${sync.created ? "created" : "updated"} in Offer Studio.`
+        : sync?.error
+          ? `Personal details were saved. Appointment draft: ${sync.error}`
+          : "Personal details were saved successfully.";
+      toast({
+        title: `Personal details ${isEditMode ? "updated" : "saved"}`,
+        description,
+        status: sync && !sync.ok && !sync.skipped ? "warning" : "success",
+        duration: 4500,
+        isClosable: true,
+      });
       onDone();
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Failed to save", status: "error", duration: 4000, isClosable: true });

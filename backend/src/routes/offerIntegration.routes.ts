@@ -21,6 +21,7 @@ const accessSchema = z.object({
   reportingManager: z.string().trim().min(1).max(200),
   shiftSchedule: z.string().trim().min(1).max(100),
   photoData: z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/).max(2_800_000).optional().or(z.literal('')),
+  additionalMessage: z.string().trim().max(3000).optional().default(''),
   photoOnly: z.boolean().optional().default(false),
 });
 
@@ -58,7 +59,7 @@ router.post('/access', asyncHandler(async (req, res) => {
   };
   const result = parsed.data.photoOnly
     ? await employeeService.syncOfferProfilePhoto(employee.empId, employee.email, parsed.data.photoData || '')
-    : await employeeService.provisionOfferAccess(employee, parsed.data.photoData || undefined);
+    : await employeeService.provisionOfferAccess(employee, parsed.data.photoData || undefined, parsed.data.additionalMessage);
 
   const message = parsed.data.photoOnly
     ? 'HRMS employee photo synchronized'
