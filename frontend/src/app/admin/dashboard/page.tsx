@@ -24,7 +24,7 @@ const announcementIcons: Record<string, typeof Info> = {
   event: Megaphone,
 };
 
-const SUMMARY_ORDER = ["Total Employees", "Present Today", "Payroll Processed", "Late Arrivals"];
+const SUMMARY_ORDER = ["Total Employees", "Present Today", "This Month Salary", "Payroll Processed", "Late Arrivals"];
 
 export default function AdminDashboard() {
   const [data, setData] = useState<DashboardSummary | null>(null);
@@ -146,7 +146,7 @@ export default function AdminDashboard() {
         bgGradient="linear(to-br, rgba(11,114,231,0.05), rgba(32,201,151,0.03), #ffffff)"
         mb={8}
       >
-        <SimpleGrid columns={{ base: 1, md: 2, xl: 4 }} spacing={5}>
+        <SimpleGrid columns={{ base: 1, md: 2, xl: 5 }} spacing={5}>
           {kpiStats.map((stat) => (
             <StatCard key={stat!.label} {...stat!} />
           ))}

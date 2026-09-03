@@ -8,6 +8,8 @@ import { PayrollRecordStatus } from '../entities/PayrollRecord.entity';
 import { UserRole } from '../entities/User.entity';
 import { EmployeeProfile } from '../entities/EmployeeProfile.entity';
 import { PersonalDetails } from '../entities/PersonalDetails.entity';
+import { EmployeeSalaryStructure } from '../entities/EmployeeSalaryStructure.entity';
+import { SalaryStructureStatus } from '../salary/salary.enums';
 
 const attendanceRepo = new AttendanceRepository();
 const leaveRepo = new LeaveRepository();
@@ -31,6 +33,7 @@ export class DashboardService {
       todayAttendance,
       departmentHeadcount,
       attendanceTrend,
+      salaryStructures,
     ] = await Promise.all([
       attendanceRepo.findAllActiveEmployees(),
       attendanceRepo.getDateSummary(today),
@@ -41,6 +44,11 @@ export class DashboardService {
       attendanceRepo.findByDateFiltered(today),
       this.getDepartmentHeadcount(),
       this.getAttendanceTrend(14),
+      AppDataSource.getRepository(EmployeeSalaryStructure).find({
+        where: { status: SalaryStructureStatus.ACTIVE },
+        relations: ['employee'],
+        order: { effectiveFrom: 'DESC', createdAt: 'DESC' },
+      }),
     ]);
 
     const totalEmployees = activeEmployees.length;
@@ -56,6 +64,39 @@ export class DashboardService {
     const emailedRecords = payrollRecords.filter((r) => r.status === PayrollRecordStatus.EMAILED);
     const latestPayrollRun = payrollRuns[0] ?? null;
     const totalPayout = completedRecords.reduce((sum, r) => sum + Number(r.netPay), 0);
+    const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
+    const completedSalaryByEmployee = new Map<string, number>();
+    for (const record of completedRecords) {
+      if (activeEmployeeIds.has(record.employeeId) && !completedSalaryByEmployee.has(record.employeeId)) {
+        completedSalaryByEmployee.set(record.employeeId, Number(record.netPay || 0));
+      }
+    }
+    const configuredSalaryByEmployee = new Map<string, number>();
+    for (const structure of salaryStructures) {
+      if (!activeEmployeeIds.has(structure.employeeId) || configuredSalaryByEmployee.has(structure.employeeId)) continue;
+      const configuredNetPay = Number(structure.summary?.netPay);
+      configuredSalaryByEmployee.set(
+        structure.employeeId,
+        Number.isFinite(configuredNetPay) ? configuredNetPay : Number(structure.monthlyCtc || 0),
+      );
+    }
+    let overallMonthlySalary = 0;
+    let salaryEmployeeCount = 0;
+    for (const employeeId of activeEmployeeIds) {
+      const amount = completedSalaryByEmployee.get(employeeId) ?? configuredSalaryByEmployee.get(employeeId);
+      if (amount === undefined) continue;
+      overallMonthlySalary += amount;
+      salaryEmployeeCount += 1;
+    }
+    const currentMonthSalary = {
+      amount: overallMonthlySalary,
+      processedAmount: totalPayout,
+      employeeCount: salaryEmployeeCount,
+      totalEmployees,
+      isFinal: totalEmployees > 0 && completedSalaryByEmployee.size >= totalEmployees,
+      month: now.toLocaleString('en', { month: 'short' }),
+      year: currentYear,
+    };
 
     let payrollStatus: 'NOT_RUN' | 'PENDING' | 'PARTIAL' | 'COMPLETED' = 'NOT_RUN';
     if (completedRecords.length === 0 && payrollRecords.length === 0 && !latestPayrollRun) {
@@ -127,6 +168,19 @@ export class DashboardService {
         icon: 'UserCheck',
         progress: totalEmployees > 0 ? Math.round(presentPct) : null,
         caption: `${todaySummary.LATE} late arrivals`,
+      },
+      {
+        label: 'This Month Salary',
+        value: new Intl.NumberFormat('en-IN', {
+          style: 'currency',
+          currency: 'INR',
+          maximumFractionDigits: 0,
+        }).format(currentMonthSalary.amount),
+        change: `${currentMonthSalary.employeeCount}/${totalEmployees} employees`,
+        changeType: 'neutral' as const,
+        icon: 'Wallet',
+        progress: null,
+        caption: `${payrollMonth} · ${currentMonthSalary.isFinal ? 'Final net payroll' : 'Projected net salary'}`,
       },
       {
         label: 'Payroll Processed',
@@ -239,6 +293,7 @@ export class DashboardService {
     return {
       kpiStats,
       payrollProcessed,
+      currentMonthSalary,
       attendanceTrend,
       departmentData: departmentHeadcount,
       attendanceBreakdown,

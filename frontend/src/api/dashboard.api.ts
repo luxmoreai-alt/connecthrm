@@ -29,6 +29,15 @@ export interface PayrollProcessed {
 export interface DashboardSummary {
   kpiStats: KpiStat[];
   payrollProcessed: PayrollProcessed;
+  currentMonthSalary: {
+    amount: number;
+    processedAmount: number;
+    employeeCount: number;
+    totalEmployees: number;
+    isFinal: boolean;
+    month: string;
+    year: number;
+  };
   attendanceTrend: AttendanceTrend[];
   departmentData: DepartmentData[];
   attendanceBreakdown: AttendanceBreakdown;
