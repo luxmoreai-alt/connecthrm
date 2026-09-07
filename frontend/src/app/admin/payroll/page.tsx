@@ -27,6 +27,17 @@ import {
   AlertDialogFooter,
   Button,
   useDisclosure,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter,
+  FormControl,
+  FormLabel,
+  FormHelperText,
+  Textarea,
 } from "@chakra-ui/react";
 import {
   DollarSign,
@@ -112,6 +123,10 @@ export default function PayrollPage() {
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailingId, setEmailingId] = useState<string | null>(null);
+  const [emailTarget, setEmailTarget] = useState<PayrollRecordType | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const emailDisclosure = useDisclosure();
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -188,7 +203,7 @@ export default function PayrollPage() {
                   size="xs"
                   variant="ghost"
                   isDisabled={emailingId === row.id}
-                  onClick={() => handleEmail(row.id)}
+                  onClick={() => openEmailDialog(row)}
                 />
               </Tooltip>
             )}
@@ -242,12 +257,26 @@ export default function PayrollPage() {
     }
   };
 
-  const handleEmail = async (id: string) => {
-    setEmailingId(id);
+  const openEmailDialog = (record: PayrollRecordType) => {
+    const period = `${MONTHS[record.month - 1]} ${record.year}`;
+    setEmailTarget(record);
+    setEmailSubject(`Your Payslip for ${period}`);
+    setEmailMessage(`Please find your payslip for ${period} attached to this email.`);
+    emailDisclosure.onOpen();
+  };
+
+  const handleEmail = async () => {
+    if (!emailTarget || !emailSubject.trim() || !emailMessage.trim()) return;
+    setEmailingId(emailTarget.id);
     try {
-      await payrollApi.emailPayslip(id);
+      await payrollApi.emailPayslip(emailTarget.id, {
+        subject: emailSubject.trim(),
+        message: emailMessage.trim(),
+      });
       toast({ title: "Payslip emailed", status: "success", duration: 2500, isClosable: true });
-      fetchData();
+      emailDisclosure.onClose();
+      setEmailTarget(null);
+      await fetchData();
     } catch (err: any) {
       toast({ title: "Email failed", description: err.message, status: "error", duration: 3500, isClosable: true });
     } finally {
@@ -393,11 +422,96 @@ export default function PayrollPage() {
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
+
+      <PayslipEmailDialog
+        isOpen={emailDisclosure.isOpen}
+        onClose={() => {
+          if (emailingId) return;
+          emailDisclosure.onClose();
+          setEmailTarget(null);
+        }}
+        recipient={emailTarget?.employeeSnapshot?.employeeName || "Employee"}
+        subject={emailSubject}
+        message={emailMessage}
+        onSubjectChange={setEmailSubject}
+        onMessageChange={setEmailMessage}
+        onSend={handleEmail}
+        isSending={!!emailingId}
+      />
     </Box>
   );
 }
 
 // ─── Manual Payroll Tab ───
+function PayslipEmailDialog({
+  isOpen,
+  onClose,
+  recipient,
+  subject,
+  message,
+  onSubjectChange,
+  onMessageChange,
+  onSend,
+  isSending,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  recipient: string;
+  subject: string;
+  message: string;
+  onSubjectChange: (value: string) => void;
+  onMessageChange: (value: string) => void;
+  onSend: () => void;
+  isSending: boolean;
+}) {
+  const isInvalid = !subject.trim() || !message.trim();
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} isCentered size="lg" closeOnOverlayClick={!isSending}>
+      <ModalOverlay />
+      <ModalContent borderRadius="xl">
+        <ModalHeader>Send Payslip Email</ModalHeader>
+        <ModalCloseButton isDisabled={isSending} />
+        <ModalBody>
+          <Text fontSize="sm" color="text.muted" mb={4}>
+            Recipient: <Text as="span" fontWeight="700" color="text.heading">{recipient}</Text>
+          </Text>
+          <FormControl isRequired mb={4}>
+            <FormLabel fontSize="sm">Subject</FormLabel>
+            <Input
+              value={subject}
+              onChange={(event) => onSubjectChange(event.target.value)}
+              maxLength={150}
+              placeholder="Email subject"
+            />
+            <FormHelperText textAlign="right">{subject.length}/150</FormHelperText>
+          </FormControl>
+          <FormControl isRequired>
+            <FormLabel fontSize="sm">Message</FormLabel>
+            <Textarea
+              value={message}
+              onChange={(event) => onMessageChange(event.target.value)}
+              maxLength={2000}
+              minH="150px"
+              resize="vertical"
+              placeholder="Add a message for the employee"
+            />
+            <FormHelperText>
+              The greeting, portal link, PDF attachment, and company signature are added automatically. {message.length}/2000
+            </FormHelperText>
+          </FormControl>
+        </ModalBody>
+        <ModalFooter gap={3}>
+          <Button variant="ghost" onClick={onClose} isDisabled={isSending}>Cancel</Button>
+          <PrimaryButton leftIcon={<Mail size={15} />} onClick={onSend} isLoading={isSending} isDisabled={isInvalid}>
+            Send Email
+          </PrimaryButton>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
+
 function ManualPayrollTab({
   month,
   year,
@@ -689,7 +803,44 @@ function BulkGenerateTab({
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [running, setRunning] = useState(false);
   const [dispatchingRunId, setDispatchingRunId] = useState<string | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<PayrollRun | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const dispatchDisclosure = useDisclosure();
   const toast = useToast();
+
+  const openDispatchDialog = (run: PayrollRun) => {
+    const period = `${MONTHS[run.month - 1]} ${run.year}`;
+    setDispatchTarget(run);
+    setEmailSubject(`Your Payslip for ${period}`);
+    setEmailMessage(`Please find your payslip for ${period} attached to this email.`);
+    dispatchDisclosure.onOpen();
+  };
+
+  const handleDispatch = async () => {
+    if (!dispatchTarget || !emailSubject.trim() || !emailMessage.trim()) return;
+    setDispatchingRunId(dispatchTarget.id);
+    try {
+      const result = await payrollApi.dispatchRun(dispatchTarget.id, {
+        sendEmail: true,
+        publishToPortal: true,
+        emailSubject: emailSubject.trim(),
+        emailMessage: emailMessage.trim(),
+      });
+      toast({
+        title: "Dispatch completed",
+        description: `Emailed ${result.emailed}, failed ${result.failed}`,
+        status: result.failed > 0 ? "warning" : "success",
+      });
+      dispatchDisclosure.onClose();
+      setDispatchTarget(null);
+      onComplete();
+    } catch (err: any) {
+      toast({ title: "Dispatch failed", description: err.message, status: "error" });
+    } finally {
+      setDispatchingRunId(null);
+    }
+  };
 
   const runColumns = useMemo<Column<PayrollRun>[]>(
     () => [
@@ -767,29 +918,7 @@ function BulkGenerateTab({
               size="xs"
               leftIcon={<Mail size={12} />}
               isLoading={dispatchingRunId === row.id}
-              onClick={async () => {
-                setDispatchingRunId(row.id);
-                try {
-                  const result = await payrollApi.dispatchRun(row.id, {
-                    sendEmail: true,
-                    publishToPortal: true,
-                  });
-                  toast({
-                    title: "Dispatch completed",
-                    description: `Emailed ${result.emailed}, failed ${result.failed}`,
-                    status: result.failed > 0 ? "warning" : "success",
-                  });
-                  onComplete();
-                } catch (err: any) {
-                  toast({
-                    title: "Dispatch failed",
-                    description: err.message,
-                    status: "error",
-                  });
-                } finally {
-                  setDispatchingRunId(null);
-                }
-              }}
+              onClick={() => openDispatchDialog(row)}
             >
               Send
             </PrimaryButton>
@@ -853,6 +982,21 @@ function BulkGenerateTab({
       </Flex>
 
       <DataTable<PayrollRun> columns={runColumns} data={runs} keyField="id" />
+      <PayslipEmailDialog
+        isOpen={dispatchDisclosure.isOpen}
+        onClose={() => {
+          if (dispatchingRunId) return;
+          dispatchDisclosure.onClose();
+          setDispatchTarget(null);
+        }}
+        recipient={`All employees in this run (${dispatchTarget?.totalEmployees || 0})`}
+        subject={emailSubject}
+        message={emailMessage}
+        onSubjectChange={setEmailSubject}
+        onMessageChange={setEmailMessage}
+        onSend={handleDispatch}
+        isSending={!!dispatchingRunId}
+      />
     </SectionCard>
   );
 }

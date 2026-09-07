@@ -41,6 +41,13 @@ export const runDispatchSchema = z.object({
   sendEmail: z.boolean().default(true),
   publishToPortal: z.boolean().default(true),
   retryFailedOnly: z.boolean().default(false),
+  emailSubject: z.string().trim().min(1).max(150).refine((value) => !/[\r\n]/.test(value), 'Subject cannot contain line breaks').optional(),
+  emailMessage: z.string().trim().min(1).max(2000).optional(),
+});
+
+export const emailPayslipSchema = z.object({
+  subject: z.string().trim().min(1).max(150).refine((value) => !/[\r\n]/.test(value), 'Subject cannot contain line breaks').optional(),
+  message: z.string().trim().min(1).max(2000).optional(),
 });
 
 export const listRecordsSchema = z.object({

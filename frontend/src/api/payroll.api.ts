@@ -194,7 +194,13 @@ export const payrollApi = {
 
   dispatchRun: (
     runId: string,
-    data: { sendEmail: boolean; publishToPortal: boolean; retryFailedOnly?: boolean },
+    data: {
+      sendEmail: boolean;
+      publishToPortal: boolean;
+      retryFailedOnly?: boolean;
+      emailSubject?: string;
+      emailMessage?: string;
+    },
   ) => api.post<DispatchRunResponse>(`${BASE}/runs/${runId}/dispatch`, data),
 
   listRecords: (filters?: { month?: number; year?: number; status?: string; search?: string }) => {
@@ -214,7 +220,8 @@ export const payrollApi = {
       `${BASE}/records/${id}`,
     ),
 
-  emailPayslip: (id: string) => api.post(`${BASE}/records/${id}/email`),
+  emailPayslip: (id: string, data?: { subject?: string; message?: string }) =>
+    api.post(`${BASE}/records/${id}/email`, data || {}),
 
   releasePayslip: (id: string) =>
     api.post<PayrollRecord>(`${BASE}/records/${id}/release`),

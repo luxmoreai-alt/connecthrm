@@ -620,7 +620,7 @@ export class PayrollService {
     return generatePayslipPdf(data, `sample_payslip_${now.getFullYear()}.pdf`);
   }
 
-  async emailPayslip(recordId: string) {
+  async emailPayslip(recordId: string, options?: { subject?: string; message?: string }) {
     const record = await this.repo.findRecordById(recordId);
     if (!record) throw ApiError.notFound('Payroll record not found');
     if (record.status === PayrollRecordStatus.DRAFT)
@@ -658,8 +658,8 @@ export class PayrollService {
       await transporter.sendMail({
         from: `"${env.SMTP_FROM_NAME}" <${sender}>`,
         to: email,
-        subject: `Your Payslip for ${periodStr}`,
-        html: buildPayslipEmailHtml(empName, periodStr, Number(record.netPay), companyName),
+        subject: options?.subject || `Your Payslip for ${periodStr}`,
+        html: buildPayslipEmailHtml(empName, periodStr, Number(record.netPay), companyName, options?.message),
         attachments: [{ filename: pdf.fileName, content: pdf.buffer }],
       }).catch((error: any) => {
         console.error('Payslip email delivery failed:', error?.message || error);
@@ -996,6 +996,8 @@ export class PayrollService {
       sendEmail: boolean;
       publishToPortal: boolean;
       retryFailedOnly?: boolean;
+      emailSubject?: string;
+      emailMessage?: string;
     },
   ) {
     const run = await this.repo.findRunById(runId);
@@ -1017,7 +1019,10 @@ export class PayrollService {
       }
       try {
         if (options.sendEmail) {
-          await this.emailPayslip(record.id);
+          await this.emailPayslip(record.id, {
+            subject: options.emailSubject,
+            message: options.emailMessage,
+          });
           emailed++;
         }
         if (options.publishToPortal) {
@@ -1046,6 +1051,8 @@ export class PayrollService {
           sendEmail: options.sendEmail,
           publishToPortal: options.publishToPortal,
           retryFailedOnly: !!options.retryFailedOnly,
+          emailSubject: options.emailSubject,
+          emailMessage: options.emailMessage,
           emailed,
           portalPublished,
           failed,
@@ -1863,15 +1870,30 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function buildPayslipEmailHtml(empName: string, period: string, _netPay?: number, companyName?: string): string {
-  const company = companyName || 'HRMS';
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[character] as string);
+}
+
+function buildPayslipEmailHtml(empName: string, period: string, _netPay?: number, companyName?: string, customMessage?: string): string {
+  const company = escapeHtml(companyName || 'HRMS');
+  const safeEmployeeName = escapeHtml(empName);
+  const safePeriod = escapeHtml(period);
+  const messageHtml = customMessage
+    ? escapeHtml(customMessage).replace(/\r?\n/g, '<br>')
+    : `We have sent your payslip for <strong>${safePeriod}</strong>. Please find it attached to this email.`;
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head><body style="font-family:'Segoe UI',Arial,sans-serif;background:#f8fafc;margin:0;padding:0;">
 <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08);">
   <div style="background:#7548b9;padding:24px 28px;"><h1 style="margin:0;color:#fff;font-size:20px;">${company}</h1></div>
   <div style="padding:28px;">
-    <p style="margin:0 0 16px;color:#1a1a2e;font-size:15px;">Hi <strong>${empName}</strong>,</p>
-    <p style="margin:0 0 16px;color:#475569;font-size:14px;">We have sent your payslip for <strong>${period}</strong>. Please find it attached to this email.</p>
+    <p style="margin:0 0 16px;color:#1a1a2e;font-size:15px;">Hi <strong>${safeEmployeeName}</strong>,</p>
+    <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.6;">${messageHtml}</p>
     <p style="margin:0 0 16px;color:#475569;font-size:14px;">You can also view and download your payslips from the HRMS portal.</p>
     <p style="margin:0;color:#475569;font-size:14px;">Regards,<br><strong>${company}</strong></p>
     <p style="margin:24px 0 0;color:#94a3b8;font-size:12px;">This is an automated message. Please do not reply.</p>

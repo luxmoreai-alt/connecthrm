@@ -9,6 +9,7 @@ import {
   runDispatchSchema,
   listRecordsSchema,
   listPayslipsSchema,
+  emailPayslipSchema,
   summarySchema,
   attendanceReportSchema,
   salaryReportSchema,
@@ -170,7 +171,14 @@ export class PayrollController {
 
   // ─── Admin: Email payslip ───
   static async emailPayslip(req: Request, res: Response): Promise<void> {
-    const result = await payrollService.emailPayslip(req.params.id as string);
+    const parsed = emailPayslipSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const result = await payrollService.emailPayslip(req.params.id as string, parsed.data);
     ApiResponse.success(res, result.message, null);
   }
 
