@@ -59,6 +59,7 @@ type BankingForm = {
   branchName: string;
   panNumber: string;
   uanNumber: string;
+  esiNumber: string;
 };
 
 const emptyCustom: CustomComponentForm = {
@@ -76,6 +77,7 @@ const emptyBanking: BankingForm = {
   branchName: "",
   panNumber: "",
   uanNumber: "",
+  esiNumber: "",
 };
 
 const formatCurrency = formatInrCurrency;
@@ -470,6 +472,7 @@ function ViewModal({
                   ["Branch Name", banking.branchName],
                   ["PAN Number", banking.panNumber],
                   ["UAN Number", banking.uanNumber],
+                  ["ESI Number", banking.esiNumber],
                 ].map(([label, value]) => (
                   <Box key={label} border="1px solid" borderColor="surface.border" borderRadius="lg" p={3} bg="surface.bg">
                     <Text fontSize="xs" color="text.muted">{label}</Text>
@@ -591,6 +594,7 @@ function SalaryStructureForm({
             branchName: submittedBanking.branchName,
             panNumber: submittedBanking.panNumber,
             uanNumber: submittedBanking.uanNumber,
+            esiNumber: submittedBanking.esiNumber,
           });
           setShowBankingInfo(true);
           setPreview(null);
@@ -647,6 +651,7 @@ function SalaryStructureForm({
           branchName: submittedBanking.branchName,
           panNumber: submittedBanking.panNumber,
           uanNumber: submittedBanking.uanNumber,
+          esiNumber: submittedBanking.esiNumber,
         });
         setShowBankingInfo(true);
       } finally {
@@ -735,6 +740,7 @@ function SalaryStructureForm({
         branchName: banking.branchName.trim(),
         panNumber: banking.panNumber.trim().toUpperCase(),
         uanNumber: banking.uanNumber.trim(),
+        esiNumber: banking.esiNumber.trim(),
       },
     };
   }, [
@@ -854,6 +860,14 @@ function SalaryStructureForm({
       toast({ title: "Enter a valid 10 to 15 digit banking mobile number", status: "warning", duration: 3000, isClosable: true });
       return;
     }
+    if (banking.uanNumber && !/^\d{12}$/.test(banking.uanNumber)) {
+      toast({ title: "UAN number must contain 12 digits", status: "warning", duration: 2500, isClosable: true });
+      return;
+    }
+    if (banking.esiNumber && !/^\d{10}$/.test(banking.esiNumber)) {
+      toast({ title: "ESI number must contain 10 digits", status: "warning", duration: 2500, isClosable: true });
+      return;
+    }
     try {
       setSaving(true);
       await salaryStructureApi.save(selectedUserId, buildPayload());
@@ -907,6 +921,7 @@ function SalaryStructureForm({
         branchName: details.branchName,
         panNumber: details.panNumber,
         uanNumber: details.uanNumber,
+        esiNumber: details.esiNumber,
       });
       toast({
         title: details.submitted ? "Employee banking details loaded" : "Banking details not submitted yet",
@@ -1277,6 +1292,7 @@ function SalaryStructureForm({
                   <Field label="Branch Name"><StyledInput value={banking.branchName} onChange={(e) => setBanking((p) => ({ ...p, branchName: e.target.value }))} /></Field>
                   <Field label="PAN Number"><StyledInput value={banking.panNumber} onChange={(e) => setBanking((p) => ({ ...p, panNumber: e.target.value.toUpperCase() }))} /></Field>
                   <Field label="UAN Number"><StyledInput value={banking.uanNumber} onChange={(e) => setBanking((p) => ({ ...p, uanNumber: e.target.value.replace(/\D/g, "") }))} /></Field>
+                  <Field label="ESI Number"><StyledInput inputMode="numeric" maxLength={10} placeholder="10-digit ESI number" value={banking.esiNumber} onChange={(e) => setBanking((p) => ({ ...p, esiNumber: e.target.value.replace(/\D/g, "").slice(0, 10) }))} /></Field>
                 </SimpleGrid>
               ) : null}
             </Box>

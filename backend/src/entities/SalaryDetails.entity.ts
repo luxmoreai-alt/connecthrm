@@ -81,6 +81,9 @@ export class SalaryDetails {
   @Column({ type: 'varchar', length: 20, nullable: true })
   uanNumber: string | null;
 
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  esiNumber: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

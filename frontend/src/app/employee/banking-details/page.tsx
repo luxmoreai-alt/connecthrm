@@ -21,6 +21,7 @@ const emptyForm: BankingForm = {
   branchName: "",
   panNumber: "",
   uanNumber: "",
+  esiNumber: "",
 };
 
 export default function EmployeeBankingDetailsPage() {
@@ -60,6 +61,10 @@ export default function EmployeeBankingDetailsPage() {
     }
     if (form.uanNumber && !/^\d{12}$/.test(form.uanNumber)) {
       toast({ title: "UAN number must contain 12 digits", status: "warning" });
+      return;
+    }
+    if (form.esiNumber && !/^\d{10}$/.test(form.esiNumber)) {
+      toast({ title: "ESI number must contain 10 digits", status: "warning" });
       return;
     }
 
@@ -106,6 +111,7 @@ export default function EmployeeBankingDetailsPage() {
           <Field label="Branch name" required><StyledInput value={form.branchName} onChange={(e) => set("branchName", e.target.value)} placeholder="Branch name" /></Field>
           <Field label="PAN number" required><StyledInput maxLength={10} value={form.panNumber} onChange={(e) => set("panNumber", e.target.value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase())} placeholder="ABCDE1234F" /></Field>
           <Field label="UAN number (optional)"><StyledInput inputMode="numeric" value={form.uanNumber} onChange={(e) => set("uanNumber", digits(e.target.value, 12))} placeholder="12-digit UAN" /></Field>
+          <Field label="ESI number (optional)"><StyledInput inputMode="numeric" value={form.esiNumber} onChange={(e) => set("esiNumber", digits(e.target.value, 10))} placeholder="10-digit ESI number" /></Field>
         </SimpleGrid>
       </SectionCard>
 

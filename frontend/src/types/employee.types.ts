@@ -182,6 +182,7 @@ export interface SalaryDetailsRow {
   branchName: string;
   panNumber: string;
   uanNumber: string;
+  esiNumber: string;
   employeeName: string;
   empId: string;
   email: string;
@@ -198,6 +199,7 @@ export interface EmployeeBankingDetails {
   branchName: string;
   panNumber: string;
   uanNumber: string;
+  esiNumber: string;
   submitted: boolean;
 }
 

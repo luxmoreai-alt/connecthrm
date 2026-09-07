@@ -29,4 +29,5 @@ export const saveSalarySchema = z.object({
   branchName: z.string().max(100).optional().default(''),
   panNumber: z.string().max(10).optional().default(''),
   uanNumber: z.string().max(20).optional().default(''),
+  esiNumber: z.string().max(10).optional().default(''),
 });

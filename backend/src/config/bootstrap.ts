@@ -48,6 +48,10 @@ export const ensureBackendReady = async (): Promise<void> => {
       await AppDataSource.query(
         `ALTER TABLE "users" ALTER COLUMN "employeeTourCompleted" SET DEFAULT false`,
       );
+      await AppDataSource.query(
+        `ALTER TABLE "salary_details"
+         ADD COLUMN IF NOT EXISTS "esiNumber" character varying(10)`,
+      );
       // OrgSettings is loaded by attendance, payroll, dashboard, and settings.
       // Keep these additive payslip-branding columns available before TypeORM
       // performs any entity SELECT in a Vercel serverless function.

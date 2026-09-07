@@ -213,6 +213,7 @@ export interface SaveEmployeeSalaryStructureInput extends SalaryPreviewInput {
     branchName?: string;
     panNumber?: string;
     uanNumber?: string;
+    esiNumber?: string;
   };
 }
 
@@ -242,6 +243,7 @@ export interface EmployeeSalaryStructureRow {
     branchName?: string;
     panNumber?: string;
     uanNumber?: string;
+    esiNumber?: string;
   };
   earnings: Array<
     SalaryComputedComponent & {

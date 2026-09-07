@@ -47,6 +47,7 @@ const bankingInfoSchema = z.object({
   branchName: z.string().max(100).optional(),
   panNumber: z.string().max(10).optional(),
   uanNumber: z.string().max(20).optional(),
+  esiNumber: z.string().max(10).optional(),
 });
 
 export const employeeBankingDetailsSchema = z.object({
@@ -61,6 +62,10 @@ export const employeeBankingDetailsSchema = z.object({
     z.literal(''),
     z.string().trim().regex(/^\d{12}$/, 'UAN number must contain 12 digits'),
   ]),
+  esiNumber: z.union([
+    z.literal(''),
+    z.string().trim().regex(/^\d{10}$/, 'ESI number must contain 10 digits'),
+  ]).optional().default(''),
 });
 
 export const previewEmployeeSalaryStructureSchema = previewInputSchema.extend({

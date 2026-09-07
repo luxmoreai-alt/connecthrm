@@ -44,6 +44,7 @@ interface SaveEmployeeSalaryStructureInput extends SalaryPreviewInput {
     branchName?: string;
     panNumber?: string;
     uanNumber?: string;
+    esiNumber?: string;
   };
 }
 
@@ -56,6 +57,7 @@ interface EmployeeBankingDetailsInput {
   branchName: string;
   panNumber: string;
   uanNumber: string;
+  esiNumber: string;
 }
 
 interface EmployeeSalaryComputationResult extends SalaryComputationResult {
@@ -108,6 +110,7 @@ export class EmployeeSalaryStructureService {
       branchName: String(banking.branchName || legacy?.branchName || ''),
       panNumber: String(banking.panNumber || legacy?.panNumber || ''),
       uanNumber: String(banking.uanNumber || legacy?.uanNumber || ''),
+      esiNumber: String(banking.esiNumber || legacy?.esiNumber || ''),
       submitted: Boolean(
         (banking.accountNumber || legacy?.accountNumber)
         && (banking.ifscCode || legacy?.ifscCode),
@@ -128,6 +131,7 @@ export class EmployeeSalaryStructureService {
       branchName: input.branchName,
       panNumber: input.panNumber,
       uanNumber: input.uanNumber,
+      esiNumber: input.esiNumber,
     };
     const structure = await this.structureRepo.findLatestByEmployee(userId);
     if (structure) await this.structureRepo.updateBankingInfo(structure.id, bankingInfo);
@@ -141,6 +145,7 @@ export class EmployeeSalaryStructureService {
       branchName: input.branchName,
       panNumber: input.panNumber,
       uanNumber: input.uanNumber || null,
+      esiNumber: input.esiNumber || null,
     });
     return this.getBankingDetails(userId);
   }
@@ -282,6 +287,7 @@ export class EmployeeSalaryStructureService {
       branchName: bankingInfo?.branchName || null,
       panNumber: bankingInfo?.panNumber || null,
       uanNumber: bankingInfo?.uanNumber || null,
+      esiNumber: bankingInfo?.esiNumber || null,
     });
   }
 

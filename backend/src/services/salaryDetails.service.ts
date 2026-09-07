@@ -22,6 +22,7 @@ interface SalaryInput {
   branchName?: string;
   panNumber?: string;
   uanNumber?: string;
+  esiNumber?: string;
 }
 
 export class SalaryDetailsService {
@@ -80,6 +81,7 @@ export class SalaryDetailsService {
       branchName: input.branchName || null,
       panNumber: input.panNumber || null,
       uanNumber: input.uanNumber || null,
+      esiNumber: input.esiNumber || null,
     });
 
     return this.formatRecord(record);
@@ -110,6 +112,7 @@ export class SalaryDetailsService {
       branchName: input.branchName || null,
       panNumber: input.panNumber || null,
       uanNumber: input.uanNumber || null,
+      esiNumber: input.esiNumber || null,
     });
 
     return this.getById(id);
@@ -171,6 +174,7 @@ export class SalaryDetailsService {
       branchName: r.branchName || '',
       panNumber: r.panNumber || '',
       uanNumber: r.uanNumber || '',
+      esiNumber: r.esiNumber || '',
       employeeName: r.user ? `${r.user.firstName} ${r.user.lastName}` : '',
       empId: r.user?.empId || '',
       email: r.user?.email || '',
