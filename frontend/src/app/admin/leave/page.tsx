@@ -38,6 +38,7 @@ import {
   FileText,
   Search,
   AlertTriangle,
+  Eye,
 } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -61,6 +62,11 @@ const STATUS_COLORS: Record<LeaveStatusType, { bg: string; color: string }> = {
 export default function AdminLeavePage() {
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isReasonOpen,
+    onOpen: onReasonOpen,
+    onClose: onReasonClose,
+  } = useDisclosure();
 
   const [requests, setRequests] = useState<LeaveRequestRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +78,7 @@ export default function AdminLeavePage() {
 
   // Action modal
   const [selectedReq, setSelectedReq] = useState<LeaveRequestRecord | null>(null);
+  const [reasonRequest, setReasonRequest] = useState<LeaveRequestRecord | null>(null);
   const [actionType, setActionType] = useState<"approve" | "reject" | "override">("approve");
   const [actionRemarks, setActionRemarks] = useState("");
   const [overrideStatus, setOverrideStatus] = useState<LeaveStatusType>("APPROVED");
@@ -118,6 +125,11 @@ export default function AdminLeavePage() {
     setOverrideType(defaultTreatment);
     setApproveType(defaultTreatment);
     onOpen();
+  };
+
+  const openReason = (req: LeaveRequestRecord) => {
+    setReasonRequest(req);
+    onReasonOpen();
   };
 
   const handleAction = async () => {
@@ -294,6 +306,16 @@ export default function AdminLeavePage() {
                       </Td>
                       <Td fontSize="xs" color="text.muted" borderColor="surface.border" maxW="160px">
                         <Text noOfLines={2}>{req.reason}</Text>
+                        <Button
+                          size="xs"
+                          variant="link"
+                          colorScheme="blue"
+                          leftIcon={<Eye size={13} />}
+                          mt={1}
+                          onClick={() => openReason(req)}
+                        >
+                          View full reason
+                        </Button>
                         {req.treatmentNote && (
                           <Text noOfLines={2} mt={1} color="orange.700">
                             {req.treatmentNote}
@@ -323,6 +345,55 @@ export default function AdminLeavePage() {
           </Table>
         </Box>
       </SectionCard>
+
+      {/* Full leave reason */}
+      <Modal
+        isOpen={isReasonOpen}
+        onClose={onReasonClose}
+        isCentered
+        size="lg"
+        onCloseComplete={() => setReasonRequest(null)}
+      >
+        <ModalOverlay />
+        <ModalContent borderRadius="xl">
+          <ModalHeader borderBottom="1px solid" borderColor="surface.border" fontSize="md" fontWeight="700">
+            Leave reason
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={5}>
+            {reasonRequest && (
+              <Flex direction="column" gap={3}>
+                <Box>
+                  <Text fontSize="sm" fontWeight="600" color="text.heading">
+                    {reasonRequest.employeeName ?? "Employee"}
+                  </Text>
+                  <Text fontSize="xs" color="text.muted">
+                    {reasonRequest.requestedLeaveType} · {formatDateRange(reasonRequest)}
+                  </Text>
+                </Box>
+                <Box bg="surface.bg" borderRadius="lg" p={4}>
+                  <Text whiteSpace="pre-wrap" fontSize="sm" color="text.body">
+                    {reasonRequest.reason}
+                  </Text>
+                </Box>
+                {reasonRequest.treatmentNote && (
+                  <Box>
+                    <Text fontSize="xs" fontWeight="600" color="text.muted" textTransform="uppercase" mb={1}>
+                      Treatment note
+                    </Text>
+                    <Text whiteSpace="pre-wrap" fontSize="sm" color="orange.700">
+                      {reasonRequest.treatmentNote}
+                    </Text>
+                  </Box>
+                )}
+              </Flex>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button onClick={onReasonClose}>Close</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* Action Modal */}
       <Modal isOpen={isOpen} onClose={onClose} isCentered size="md">
