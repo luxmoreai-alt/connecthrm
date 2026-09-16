@@ -29,7 +29,7 @@ import {
   InputGroup,
   InputLeftElement,
 } from "@chakra-ui/react";
-import { Eye, Plus, Trash2, Download, FileText, Mail, ClipboardList, CheckCircle2, Search, BellRing } from "lucide-react";
+import { Eye, Plus, Trash2, Download, FileText, Mail, ClipboardList, CheckCircle2, Search, BellRing, ArrowLeft } from "lucide-react";
 import { documentsApi, employeeApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -39,7 +39,7 @@ import { Field, StyledSelect } from "@/components/ui/FormHelpers";
 import UploadDropzone, { formatBytes } from "@/components/ui/UploadDropzone";
 import EmployeeSelector from "@/components/ui/EmployeeSelector";
 import { ONBOARDING_DOCUMENTS } from "@/components/employees/OnboardingDocuments";
-import type { DocumentRow, DropdownEmployee } from "@/types";
+import type { DocumentRow, DropdownEmployee, EmployeeFromAPI } from "@/types";
 
 /** Server origin (no /api suffix) — used for static file URLs */
 const DOCUMENT_TYPES = [
@@ -247,10 +247,13 @@ function UploadForm({
 /* ── Main Page ──────────────────────────────────────────────────── */
 export default function DocumentsPage() {
   const [records, setRecords] = useState<DocumentRow[]>([]);
+  const [allDocuments, setAllDocuments] = useState<DocumentRow[]>([]);
+  const [employees, setEmployees] = useState<EmployeeFromAPI[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<DropdownEmployee | null>(null);
-  const [view, setView] = useState<"list" | "upload">("list");
+  const [view, setView] = useState<"directory" | "detail" | "upload">("directory");
   const [viewRecord, setViewRecord] = useState<DocumentRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DocumentRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -280,9 +283,26 @@ export default function DocumentsPage() {
     }
   }, [toast]);
 
+  const fetchDirectory = useCallback(async () => {
+    try {
+      setDirectoryLoading(true);
+      const [employeeResult, documentResult] = await Promise.all([employeeApi.list(), documentsApi.list()]);
+      setEmployees(employeeResult.data);
+      setAllDocuments(documentResult.data);
+    } catch {
+      toast({ title: "Failed to load employee document status", status: "error", duration: 3000, isClosable: true });
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     void fetchRecords(selectedUserId);
   }, [fetchRecords, selectedUserId]);
+
+  useEffect(() => {
+    void fetchDirectory();
+  }, [fetchDirectory]);
 
   const isExperienced = selectedEmployee?.employmentType?.trim().toLowerCase() === "experienced";
   const requiredDocuments = ONBOARDING_DOCUMENTS.filter((item) => !item.ifApplicable || isExperienced);
@@ -310,6 +330,7 @@ export default function DocumentsPage() {
       deleteDisclosure.onClose();
       setDeleteTarget(null);
       fetchRecords(selectedUserId);
+      void fetchDirectory();
     } catch (err: any) {
       toast({ title: "Delete failed", description: err?.message || "Error", status: "error", duration: 4000, isClosable: true });
     } finally {
@@ -318,8 +339,22 @@ export default function DocumentsPage() {
   };
 
   const handleUploadDone = () => {
-    setView("list");
+    setView("detail");
     fetchRecords(selectedUserId);
+    void fetchDirectory();
+  };
+
+  const openEmployeeDocuments = (employee: EmployeeFromAPI) => {
+    setSelectedUserId(employee.user.id);
+    setSelectedEmployee({
+      userId: employee.user.id,
+      empId: employee.user.empId || "",
+      firstName: employee.user.firstName,
+      lastName: employee.user.lastName,
+      employmentType: employee.employmentType,
+    });
+    setSearchQuery("");
+    setView("detail");
   };
 
   const sendDocumentReminder = async (userId: string) => {
@@ -370,6 +405,27 @@ export default function DocumentsPage() {
     return [record.empId, record.employeeName, record.email, record.originalName, record.documentType]
       .some((value) => value?.toLowerCase().includes(query));
   });
+
+  const filteredEmployees = employees.filter((employee) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      employee.user.firstName,
+      employee.user.lastName,
+      employee.user.empId,
+      employee.designation,
+      employee.department,
+    ].some((value) => value?.toLowerCase().includes(query));
+  });
+
+  const documentProgress = (employee: EmployeeFromAPI) => {
+    const required = ONBOARDING_DOCUMENTS.filter(
+      (document) => !document.ifApplicable || employee.employmentType?.trim().toLowerCase() === "experienced",
+    );
+    const uploaded = allDocuments.filter((document) => document.userId === employee.user.id);
+    const completed = required.filter((document) => uploaded.some((uploadedDocument) => uploadedDocument.documentType === document.type)).length;
+    return { completed, total: required.length, pending: required.length - completed, uploaded: uploaded.length };
+  };
 
   const columns: Column<DocumentRow>[] = [
     {
@@ -457,11 +513,105 @@ export default function DocumentsPage() {
     },
   ];
 
+  if (view === "directory") {
+    return (
+      <Box>
+        <PageHeader
+          title="Documents"
+          subtitle="Review employee document status and manage uploaded files."
+          actions={<HStack>
+            <SecondaryButton size="sm" leftIcon={<Mail size={16} />} onClick={sendDisclosure.onOpen}>Send upload link</SecondaryButton>
+            <PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => setView("upload")}>Upload New</PrimaryButton>
+          </HStack>}
+        />
+
+        <SectionCard>
+          <Flex justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap={3} mb={5}>
+            <Box>
+              <Text fontSize="lg" fontWeight="800" color="text.heading">Employee documents</Text>
+              <Text fontSize="sm" color="text.muted">Select an employee to view, upload, download, or manage their documents.</Text>
+            </Box>
+            <InputGroup maxW={{ base: "100%", md: "340px" }}>
+              <InputLeftElement pointerEvents="none"><Search size={16} color="#A0AEC0" /></InputLeftElement>
+              <Input
+                placeholder="Search name, ID, designation..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                borderRadius="lg"
+                bg="surface.bg"
+                borderColor="surface.border"
+              />
+            </InputGroup>
+          </Flex>
+
+          {directoryLoading ? (
+            <Flex minH="300px" align="center" justify="center"><Spinner color="brand.500" /></Flex>
+          ) : filteredEmployees.length === 0 ? (
+            <Flex minH="220px" align="center" justify="center" direction="column" color="text.muted">
+              <ClipboardList size={34} />
+              <Text mt={3} fontWeight="700" color="text.heading">No employees found</Text>
+              <Text mt={1} fontSize="sm">Try a different employee name, ID, or designation.</Text>
+            </Flex>
+          ) : (
+            <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
+              {filteredEmployees.map((employee) => {
+                const progress = documentProgress(employee);
+                const isComplete = progress.pending === 0;
+                return (
+                  <Box key={employee.id} border="1px solid" borderColor="surface.border" borderRadius="xl" p={5} bg="white" transition="all .2s ease" _hover={{ borderColor: "brand.300", boxShadow: "md", transform: "translateY(-2px)" }}>
+                    <Flex justify="space-between" gap={3} align="flex-start">
+                      <Box minW={0}>
+                        <Text fontWeight="800" color="text.heading" noOfLines={1}>{employee.user.firstName} {employee.user.lastName}</Text>
+                        <Text fontSize="sm" color="brand.500" fontWeight="600">{employee.user.empId || "Employee ID unavailable"}</Text>
+                        <Text mt={1} fontSize="sm" color="text.muted" noOfLines={1}>{employee.designation || "Designation not set"}</Text>
+                      </Box>
+                      <Badge colorScheme={isComplete ? "green" : "orange"} borderRadius="full" px={2.5} py={1} whiteSpace="nowrap">
+                        {isComplete ? "Complete" : `${progress.pending} pending`}
+                      </Badge>
+                    </Flex>
+
+                    <Box mt={4} p={3} bg={isComplete ? "green.50" : "orange.50"} borderRadius="lg">
+                      <Flex justify="space-between" align="center">
+                        <Text fontSize="xs" fontWeight="700" color="text.muted" textTransform="uppercase">Required documents</Text>
+                        <Text fontSize="sm" fontWeight="800" color={isComplete ? "green.700" : "orange.700"}>{progress.completed}/{progress.total}</Text>
+                      </Flex>
+                      <Text mt={1} fontSize="xs" color="text.muted">{progress.uploaded} uploaded file{progress.uploaded === 1 ? "" : "s"}</Text>
+                    </Box>
+
+                    <PrimaryButton w="100%" mt={4} size="sm" leftIcon={<Eye size={15} />} onClick={() => openEmployeeDocuments(employee)}>
+                      View documents
+                    </PrimaryButton>
+                  </Box>
+                );
+              })}
+            </SimpleGrid>
+          )}
+        </SectionCard>
+
+        <Modal isOpen={sendDisclosure.isOpen} onClose={sendDisclosure.onClose} isCentered>
+          <ModalOverlay />
+          <ModalContent borderRadius="xl">
+            <ModalHeader>Send onboarding upload link</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text fontSize="sm" color="text.muted" mb={4}>Select an employee. They will receive an email with the personal-details link, complete document checklist, and upload instructions.</Text>
+              <EmployeeSelector value={sendUserId} onChange={setSendUserId} />
+            </ModalBody>
+            <Flex justify="flex-end" gap={3} p={6} pt={4}>
+              <SecondaryButton onClick={sendDisclosure.onClose}>Cancel</SecondaryButton>
+              <PrimaryButton leftIcon={<Mail size={15} />} onClick={sendOnboardingLink} isLoading={sendingLink}>Send email</PrimaryButton>
+            </Flex>
+          </ModalContent>
+        </Modal>
+      </Box>
+    );
+  }
+
   if (view === "upload") {
     return (
       <Box>
         <PageHeader title="Documents" subtitle="Upload employee documents." />
-        <UploadForm initialUserId={selectedUserId} onDone={handleUploadDone} onCancel={() => setView("list")} />
+        <UploadForm initialUserId={selectedUserId} onDone={handleUploadDone} onCancel={() => setView(selectedUserId ? "detail" : "directory")} />
       </Box>
     );
   }
@@ -472,6 +622,7 @@ export default function DocumentsPage() {
         title="Documents"
         subtitle="Upload and manage employee documents."
         actions={<HStack>
+          <SecondaryButton size="sm" leftIcon={<ArrowLeft size={16} />} onClick={() => { setSearchQuery(""); setView("directory"); }}>All employees</SecondaryButton>
           <SecondaryButton size="sm" leftIcon={<Mail size={16} />} onClick={sendDisclosure.onOpen}>Send upload link</SecondaryButton>
           <PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => setView("upload")}>Upload New</PrimaryButton>
         </HStack>}
