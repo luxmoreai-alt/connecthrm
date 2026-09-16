@@ -25,8 +25,11 @@ import {
   AlertDialogBody,
   AlertDialogFooter,
   Button,
+  Input,
+  InputGroup,
+  InputLeftElement,
 } from "@chakra-ui/react";
-import { Eye, Plus, Trash2, Download, FileText, Mail, ClipboardList, CheckCircle2 } from "lucide-react";
+import { Eye, Plus, Trash2, Download, FileText, Mail, ClipboardList, CheckCircle2, Search, BellRing } from "lucide-react";
 import { documentsApi, employeeApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -253,6 +256,7 @@ export default function DocumentsPage() {
   const [deleting, setDeleting] = useState(false);
   const [sendUserId, setSendUserId] = useState("");
   const [sendingLink, setSendingLink] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const viewModal = useDisclosure();
   const deleteDisclosure = useDisclosure();
   const sendDisclosure = useDisclosure();
@@ -318,6 +322,22 @@ export default function DocumentsPage() {
     fetchRecords(selectedUserId);
   };
 
+  const sendDocumentReminder = async (userId: string) => {
+    try {
+      setSendingLink(true);
+      const result = await employeeApi.sendOnboardingLink(userId);
+      toast({
+        title: "Document reminder sent",
+        description: `A reminder was emailed to ${result.email}`,
+        status: "success",
+      });
+    } catch (error: any) {
+      toast({ title: "Could not send document reminder", description: error?.message, status: "error" });
+    } finally {
+      setSendingLink(false);
+    }
+  };
+
   const handleDownload = async (row: DocumentRow) => {
     try {
       await documentsApi.download(row.id, row.originalName);
@@ -343,6 +363,13 @@ export default function DocumentsPage() {
       setSendingLink(false);
     }
   };
+
+  const filteredRecords = records.filter((record) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return [record.empId, record.employeeName, record.email, record.originalName, record.documentType]
+      .some((value) => value?.toLowerCase().includes(query));
+  });
 
   const columns: Column<DocumentRow>[] = [
     {
@@ -495,25 +522,48 @@ export default function DocumentsPage() {
                 <Badge colorScheme={pendingDocuments.length ? "orange" : "green"} px={3} py={1.5} borderRadius="full">{completedDocuments}/{requiredDocuments.length} complete</Badge>
               </Flex>
               {pendingDocuments.length > 0 && (
-                <Flex mt={4} gap={2} flexWrap="wrap">
-                  {pendingDocuments.map((document) => (
-                    <Badge key={document.type} bg="white" color="orange.800" border="1px solid" borderColor="orange.200" borderRadius="full" px={3} py={1.5} textTransform="none" fontSize="xs">
-                      {document.title}
-                    </Badge>
-                  ))}
+                <Flex mt={4} gap={3} flexWrap="wrap" align="center" justify="space-between">
+                  <Flex gap={2} flexWrap="wrap">
+                    {pendingDocuments.map((document) => (
+                      <Badge key={document.type} bg="white" color="orange.800" border="1px solid" borderColor="orange.200" borderRadius="full" px={3} py={1.5} textTransform="none" fontSize="xs">
+                        {document.title}
+                      </Badge>
+                    ))}
+                  </Flex>
+                  <SecondaryButton
+                    size="sm"
+                    leftIcon={<BellRing size={15} />}
+                    onClick={() => sendDocumentReminder(selectedUserId)}
+                    isLoading={sendingLink}
+                  >
+                    Send document reminder
+                  </SecondaryButton>
                 </Flex>
               )}
             </Box>
 
-            <Flex justify="space-between" align="center" mb={3}>
+            <Flex justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap={3} mb={3}>
               <Text fontWeight="800" color="text.heading">Uploaded documents</Text>
-              <Text fontSize="sm" color="text.muted">{records.length} document{records.length !== 1 ? "s" : ""}</Text>
+              <HStack spacing={3} justify="space-between">
+                <InputGroup size="sm" maxW={{ base: "100%", md: "280px" }}>
+                  <InputLeftElement pointerEvents="none"><Search size={15} color="#A0AEC0" /></InputLeftElement>
+                  <Input
+                    placeholder="Search documents..."
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    borderRadius="lg"
+                    bg="surface.bg"
+                    borderColor="surface.border"
+                  />
+                </InputGroup>
+                <Text fontSize="sm" color="text.muted" whiteSpace="nowrap">{filteredRecords.length} of {records.length}</Text>
+              </HStack>
             </Flex>
             <DataTable
               columns={columns}
-              data={records}
+              data={filteredRecords}
               keyField="id"
-              emptyMessage="No documents uploaded for this employee. Click 'Upload New' to add one."
+              emptyMessage={searchQuery ? "No documents match your search." : "No documents uploaded for this employee. Click 'Upload New' to add one."}
             />
           </>
         )}

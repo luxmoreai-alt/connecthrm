@@ -7,13 +7,16 @@ import {
   Button,
   Flex,
   HStack,
+  Input,
+  InputGroup,
+  InputLeftElement,
   Select,
   SimpleGrid,
   Spinner,
   Text,
   useToast,
 } from "@chakra-ui/react";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RefreshCw } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RefreshCw, Search } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import {
@@ -107,6 +110,7 @@ export default function AdminAttendanceCalendarPage() {
   const toast = useToast();
   const [employees, setEmployees] = useState<DropdownEmployee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [month, setMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -171,6 +175,14 @@ export default function AdminAttendanceCalendarPage() {
   };
 
   const selectedEmployee = employees.find((employee) => employee.userId === employeeId);
+  const filteredEmployees = useMemo(() => {
+    const query = employeeSearch.trim().toLowerCase();
+    if (!query) return employees;
+    return employees.filter((employee) =>
+      [employee.empId, employee.firstName, employee.lastName]
+        .some((value) => value?.toLowerCase().includes(query)),
+    );
+  }, [employeeSearch, employees]);
   const currentDay = useMemo(todayKey, []);
   const monthLabel = useMemo(
     () => new Date(month.year, month.month - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
@@ -214,13 +226,23 @@ export default function AdminAttendanceCalendarPage() {
         <Flex gap={4} direction={{ base: "column", md: "row" }} align={{ md: "end" }}>
           <Box flex="1" maxW={{ md: "460px" }}>
             <Text fontSize="xs" fontWeight="700" color="text.muted" mb={1.5}>EMPLOYEE</Text>
+            <InputGroup size="sm" mb={2}>
+              <InputLeftElement pointerEvents="none"><Search size={15} color="#A0AEC0" /></InputLeftElement>
+              <Input
+                placeholder="Search employee by name or ID..."
+                value={employeeSearch}
+                onChange={(event) => setEmployeeSearch(event.target.value)}
+                borderRadius="md"
+                borderColor="surface.border"
+              />
+            </InputGroup>
             <Select
               value={employeeId}
               onChange={(event) => setEmployeeId(event.target.value)}
               isDisabled={loadingEmployees}
               placeholder={loadingEmployees ? "Loading employees..." : "Select employee"}
             >
-              {employees.map((employee) => (
+              {filteredEmployees.map((employee) => (
                 <option value={employee.userId} key={employee.userId}>
                   {employee.empId} - {employee.firstName} {employee.lastName}
                 </option>
