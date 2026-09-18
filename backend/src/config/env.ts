@@ -104,6 +104,9 @@ const envSchema = z.object({
   VAPID_SUBJECT: optionalString,
   OFFER_APP_URL: optionalString,
   OFFER_SYNC_TOKEN: optionalString,
+  // Outlook-clone employee access provisioning (optional).
+  OUTLOOK_PROVISIONING_URL: optionalString,
+  OUTLOOK_PROVISIONING_TOKEN: optionalString,
 });
 
 const parsed = envSchema.safeParse(process.env);

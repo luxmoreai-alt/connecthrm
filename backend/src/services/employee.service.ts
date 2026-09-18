@@ -12,6 +12,7 @@ import { getUploadPath } from '../utils/uploadPath';
 import { del, put } from '@vercel/blob';
 import { randomUUID } from 'crypto';
 import { NotificationService } from './notification.service';
+import { env } from '../config/env';
 
 interface CreateEmployeeInput {
   empId: string;
@@ -121,6 +122,33 @@ export class EmployeeService {
     return profilePhotoUrl;
   }
 
+  private async provisionOutlookAccess(input: CreateEmployeeInput, empId: string) {
+    if (!env.OUTLOOK_PROVISIONING_URL || !env.OUTLOOK_PROVISIONING_TOKEN) {
+      return { sent: false, skipped: true };
+    }
+
+    const response = await fetch(`${env.OUTLOOK_PROVISIONING_URL.replace(/\/+$/, '')}/api/provisioning/employees`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OUTLOOK_PROVISIONING_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: input.email,
+        employeeId: empId,
+        fullName: `${input.firstName} ${input.lastName}`.trim(),
+        title: input.designation,
+        department: input.department,
+        joinedAt: input.dateOfJoining,
+      }),
+    });
+    const result = await response.json().catch(() => ({})) as { error?: string; provisioned?: boolean; alreadyProvisioned?: boolean };
+    if (!response.ok) {
+      throw new Error(result.error || `Outlook provisioning failed (${response.status})`);
+    }
+    return { sent: Boolean(result.provisioned || result.alreadyProvisioned), skipped: false };
+  }
+
   async createEmployee(input: CreateEmployeeInput, photoData?: string, additionalMessage = '') {
     const empId = input.empId.trim().toUpperCase();
     const [existingEmail, existingEmpId] = await Promise.all([
@@ -201,11 +229,23 @@ export class EmployeeService {
       console.error('Failed to send credentials email', emailError);
     }
 
+    let outlookAccessSent = false;
+    let outlookAccessError: string | undefined;
+    try {
+      const result = await this.provisionOutlookAccess(input, empId);
+      outlookAccessSent = result.sent;
+    } catch (error) {
+      outlookAccessError = (error as Error).message;
+      console.error('Failed to provision Outlook access', outlookAccessError);
+    }
+
     return {
       empId,
       generatedPassword,
       emailSent,
       emailError,
+      outlookAccessSent,
+      outlookAccessError,
       profile: {
         id: profile.id,
         department: profile.department,

@@ -264,7 +264,6 @@ function getLeaveCellStyle(record: AttendanceRecord): CalendarCellVisual {
 
 function resolveFinalDisplayStatus(
   record: AttendanceRecord,
-  policy: MonthlyAttendanceResponse["policy"],
   date: string,
   todayDate: string,
 ): FinalDisplayStatus {
@@ -278,30 +277,16 @@ function resolveFinalDisplayStatus(
 
   if (date > todayDate) return "NOT_STARTED";
 
-  // Arrival beyond the configured grace period receives half-day treatment.
-  if (Number(record.lateMinutes || 0) > 0) return "HALF_DAY";
-
-  // While today's shift is still open, the final worked-hour threshold has not
-  // been reached yet. Show the employee as present instead of prematurely LOP.
-  if (date === todayDate && record.firstCheckInAt && record.missingPunch) {
-    return "PRESENT";
-  }
-
-  const effectiveWorked = Math.max(
-    0,
-    Number(record.totalWorkMinutes || 0) + Number(record.permissionMinutesApplied || 0),
-  );
-
-  if (
-    effectiveWorked >= policy.fullDayMinMinutes &&
-    Number(record.earlyOutMinutes || 0) === 0 &&
-    !record.missingPunch
-  ) return "PRESENT";
-
-  // Any employee who punched in but failed a full-day condition receives
-  // half-day salary treatment. Only a complete no-punch day is LOP.
-  if (record.firstCheckInAt || effectiveWorked > 0) return "HALF_DAY";
-  return "LOP";
+  // Attendance status is finalized by the server (including policy changes,
+  // permissions, regularization and admin overrides). Recomputing it in the
+  // browser caused employee and admin calendars to show different dates.
+  if (record.status === "PRESENT") return "PRESENT";
+  if (record.status === "HALF_DAY") return "HALF_DAY";
+  if (record.status === "LOP" || record.status === "ABSENT") return "LOP";
+  if (["LATE", "MISSED_CHECK_IN", "MISSING_PUNCH", "EARLY_OUT"].includes(record.status)) return "HALF_DAY";
+  if (["PERMISSION", "REGULARIZED", "OVERTIME"].includes(record.status)) return "PRESENT";
+  if (record.status === "NOT_STARTED") return "LOP";
+  return "NOT_STARTED";
 }
 
 function getStatusCode(
@@ -552,7 +537,6 @@ export default function EmployeeAttendancePage() {
 
       const finalStatus = resolveFinalDisplayStatus(
         record,
-        monthly!.policy,
         date,
         todayDate,
       );
@@ -608,7 +592,7 @@ export default function EmployeeAttendancePage() {
     };
 
     for (const day of monthly.days) {
-      const finalStatus = resolveFinalDisplayStatus(day, monthly.policy, day.date, todayDate);
+      const finalStatus = resolveFinalDisplayStatus(day, day.date, todayDate);
       if (finalStatus !== "NOT_STARTED") {
         counts[finalStatus] += 1;
       }
@@ -641,7 +625,7 @@ export default function EmployeeAttendancePage() {
   const selectedRecord = selectedDay?.attendance ?? null;
   const selectedDisplayStatus =
     selectedRecord && monthly
-      ? resolveFinalDisplayStatus(selectedRecord, monthly.policy, selectedRecord.date, todayDate)
+      ? resolveFinalDisplayStatus(selectedRecord, selectedRecord.date, todayDate)
       : "NOT_STARTED";
   const selectedStyle = STATUS_STYLE[selectedDisplayStatus];
   const isPreJoining = selectedRecord?.dayType === "PRE_JOINING";
