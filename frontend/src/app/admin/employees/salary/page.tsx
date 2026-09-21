@@ -1622,10 +1622,11 @@ export default function SalaryBankingPage() {
                   </Flex>
 
                   {salary ? (
-                    <SimpleGrid columns={2} spacing={2} mt={4}>
+                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={2} mt={4}>
+                      <SummaryTile title="Annual CTC" value={formatCurrency(salary.annualCtc)} />
                       <SummaryTile title="Monthly CTC" value={formatCurrency(salary.monthlyCtc)} />
                       <SummaryTile title="Net pay" value={formatCurrency(Number(salary.summary?.netPay || 0))} />
-                      <Box gridColumn="span 2"><Text fontSize="xs" color="text.muted">{salary.appliedTemplateName} · Version {salary.appliedConfigVersion}</Text></Box>
+                      <Box gridColumn={{ base: "span 1", sm: "span 3" }}><Text fontSize="xs" color="text.muted">{salary.appliedTemplateName} · Version {salary.appliedConfigVersion}</Text></Box>
                     </SimpleGrid>
                   ) : (
                     <Flex mt={4} minH="92px" p={3} borderRadius="lg" bg="orange.50" color="orange.800" align="center" gap={2}>
