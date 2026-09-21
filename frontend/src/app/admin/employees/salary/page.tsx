@@ -29,12 +29,12 @@ import { Edit2, Eye, Info, Lock, Mail, Plus, RefreshCw, Search, Trash2, XCircle 
 import { employeeApi, salaryStructureApi, settingsApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
-import DataTable, { type Column } from "@/components/ui/DataTable";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/Buttons";
 import { Field, StyledInput, StyledSelect } from "@/components/ui/FormHelpers";
 import EmployeeSelector from "@/components/ui/EmployeeSelector";
 import { formatInrCurrency } from "@/lib/formatters";
 import type {
+  EmployeeFromAPI,
   EmployeeSalaryStructureRow,
   OrganizationSalaryConfig,
   SalaryComputation,
@@ -42,7 +42,7 @@ import type {
   SaveEmployeeSalaryStructureInput,
 } from "@/types";
 
-type PageView = "list" | "add" | "edit";
+type PageView = "directory" | "add" | "edit";
 
 type CustomComponentForm = {
   componentName: string;
@@ -1487,19 +1487,25 @@ function SalaryStructureForm({
 export default function SalaryBankingPage() {
   const toast = useToast();
   const viewModal = useDisclosure();
-  const [view, setView] = useState<PageView>("list");
+  const [view, setView] = useState<PageView>("directory");
   const [rows, setRows] = useState<EmployeeSalaryStructureRow[]>([]);
+  const [employees, setEmployees] = useState<EmployeeFromAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [editRow, setEditRow] = useState<EmployeeSalaryStructureRow | null>(null);
   const [viewRow, setViewRow] = useState<EmployeeSalaryStructureRow | null>(null);
+  const [configureUserId, setConfigureUserId] = useState("");
   const [sendingLinkEmployeeId, setSendingLinkEmployeeId] = useState<string | null>(null);
 
   const fetchRows = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await salaryStructureApi.list();
-      setRows(res.data);
+      const [salaryResult, employeeResult] = await Promise.all([
+        salaryStructureApi.list(),
+        employeeApi.list(),
+      ]);
+      setRows(salaryResult.data);
+      setEmployees(employeeResult.data);
     } catch {
       toast({ title: "Failed to load salary structures", status: "error", duration: 3000, isClosable: true });
     } finally {
@@ -1511,9 +1517,24 @@ export default function SalaryBankingPage() {
     fetchRows();
   }, [fetchRows]);
 
-  const filtered = rows.filter((row) => {
-    const q = search.toLowerCase();
-    return row.employeeName.toLowerCase().includes(q) || row.employeeCode.toLowerCase().includes(q) || row.email.toLowerCase().includes(q) || row.appliedTemplateName.toLowerCase().includes(q);
+  const salaryByEmployeeId = useMemo(
+    () => new Map(rows.map((row) => [row.employeeId, row])),
+    [rows],
+  );
+
+  const filteredEmployees = employees.filter((employee) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const salary = salaryByEmployeeId.get(employee.user.id);
+    return [
+      employee.user.firstName,
+      employee.user.lastName,
+      employee.user.empId,
+      employee.user.email,
+      employee.designation,
+      employee.department,
+      salary?.appliedTemplateName,
+    ].some((value) => value?.toLowerCase().includes(q));
   });
 
   const sendRowBankingLink = async (row: EmployeeSalaryStructureRow) => {
@@ -1534,21 +1555,11 @@ export default function SalaryBankingPage() {
     }
   };
 
-  const columns: Column<EmployeeSalaryStructureRow>[] = [
-    { key: "employeeCode", header: "Emp ID", width: "110px", render: (row) => <Text fontSize="sm" fontWeight="700" color="brand.500">{row.employeeCode}</Text> },
-    { key: "employeeName", header: "Employee", render: (row) => <Box><Text fontSize="sm" fontWeight="600">{row.employeeName}</Text><Text fontSize="xs" color="text.muted">{row.email}</Text></Box> },
-    { key: "template", header: "Template", render: (row) => <Box><Text fontSize="sm" fontWeight="600">{row.appliedTemplateName}</Text><Text fontSize="xs" color="text.muted">Version {row.appliedConfigVersion}</Text></Box> },
-    { key: "monthlyCtc", header: "Monthly CTC", render: (row) => <Text fontSize="sm">{formatCurrency(row.monthlyCtc)}</Text> },
-    { key: "netPay", header: "Net Pay", render: (row) => <Text fontSize="sm" fontWeight="700" color="green.600">{formatCurrency(Number(row.summary?.netPay || 0))}</Text> },
-    { key: "employerCost", header: "Employer Cost", render: (row) => <Text fontSize="sm" fontWeight="700" color="blue.600">{formatCurrency(Number(row.summary?.employerCostImpact || 0))}</Text> },
-    { key: "actions", header: "Actions", width: "150px", render: (row) => <HStack spacing={1}><IconButton aria-label="View salary structure" title="View salary structure" icon={<Eye size={16} />} size="sm" variant="ghost" onClick={() => { setViewRow(row); viewModal.onOpen(); }} /><IconButton aria-label="Edit salary structure" title="Edit salary structure" icon={<Edit2 size={16} />} size="sm" variant="ghost" onClick={() => { setEditRow(row); setView("edit"); }} /><IconButton aria-label="Send banking details link" title="Send banking details link" icon={sendingLinkEmployeeId === row.employeeId ? <Spinner size="xs" /> : <Mail size={16} />} size="sm" variant="ghost" colorScheme="blue" isDisabled={sendingLinkEmployeeId !== null} onClick={() => { void sendRowBankingLink(row); }} /></HStack> },
-  ];
-
   if (view === "add") {
     return (
       <Box>
         <PageHeader title="Salary & Banking" subtitle="Generate salary structures from organization-level salary settings." />
-        <SalaryStructureForm onCancel={() => setView("list")} onDone={() => { setView("list"); fetchRows(); }} />
+        <SalaryStructureForm initialUserId={configureUserId} onCancel={() => { setConfigureUserId(""); setView("directory"); }} onDone={() => { setConfigureUserId(""); setView("directory"); fetchRows(); }} />
       </Box>
     );
   }
@@ -1557,28 +1568,103 @@ export default function SalaryBankingPage() {
     return (
       <Box>
         <PageHeader title="Salary & Banking" subtitle="Update employee salary structure and banking details." />
-        <SalaryStructureForm initialUserId={editRow.employeeId} onCancel={() => { setEditRow(null); setView("list"); }} onDone={() => { setEditRow(null); setView("list"); fetchRows(); }} />
+        <SalaryStructureForm initialUserId={editRow.employeeId} onCancel={() => { setEditRow(null); setView("directory"); }} onDone={() => { setEditRow(null); setView("directory"); fetchRows(); }} />
       </Box>
     );
   }
+
+  const configuredEmployees = employees.filter((employee) => salaryByEmployeeId.has(employee.user.id)).length;
 
   return (
     <Box>
       <PageHeader
         title="Salary & Banking"
-        subtitle="Auto-fill earnings, statutory deductions and net pay from organization defaults."
-        actions={<PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => setView("add")}>Configure Salary</PrimaryButton>}
+        subtitle="Review salary setup for every employee and configure banking details."
+        actions={<PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => { setConfigureUserId(""); setView("add"); }}>Configure Salary</PrimaryButton>}
       />
 
       <SectionCard>
-        <Flex justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap={3} mb={4}>
-          <InputGroup maxW={{ base: "100%", md: "340px" }}>
+        <Flex justify="space-between" align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap={3} mb={5}>
+          <Box>
+            <Text fontSize="lg" fontWeight="800" color="text.heading">Employee salary setup</Text>
+            <Text fontSize="sm" color="text.muted">{configuredEmployees} of {employees.length} employees have a configured salary.</Text>
+          </Box>
+          <InputGroup maxW={{ base: "100%", md: "360px" }}>
             <InputLeftElement pointerEvents="none"><Search size={16} color="gray" /></InputLeftElement>
-            <Input placeholder="Search by employee, code, email, template" size="md" borderRadius="lg" fontSize="sm" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="Search name, ID, email, designation..." size="md" borderRadius="lg" fontSize="sm" value={search} onChange={(e) => setSearch(e.target.value)} />
           </InputGroup>
-          <Text fontSize="sm" color="text.muted">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</Text>
         </Flex>
-        <DataTable columns={columns} data={filtered} keyField="id" emptyMessage={loading ? "Loading..." : "No salary structure found."} />
+
+        {loading ? (
+          <Flex minH="300px" align="center" justify="center"><Spinner color="brand.500" /></Flex>
+        ) : filteredEmployees.length === 0 ? (
+          <Flex minH="220px" align="center" justify="center" direction="column" color="text.muted">
+            <Search size={32} />
+            <Text mt={3} fontWeight="700" color="text.heading">No employees found</Text>
+            <Text mt={1} fontSize="sm">Try a different name, ID, email, or designation.</Text>
+          </Flex>
+        ) : (
+          <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
+            {filteredEmployees.map((employee) => {
+              const salary = salaryByEmployeeId.get(employee.user.id);
+              const isConfigured = Boolean(salary);
+              return (
+                <Box key={employee.id} border="1px solid" borderColor="surface.border" borderRadius="xl" p={5} bg="white" transition="all .2s ease" _hover={{ borderColor: "brand.300", boxShadow: "md", transform: "translateY(-2px)" }}>
+                  <Flex justify="space-between" align="flex-start" gap={3}>
+                    <Box minW={0}>
+                      <Text fontWeight="800" color="text.heading" noOfLines={1}>{employee.user.firstName} {employee.user.lastName}</Text>
+                      <Text fontSize="sm" color="brand.500" fontWeight="600">{employee.user.empId || "Employee ID unavailable"}</Text>
+                      <Text mt={1} fontSize="sm" color="text.muted" noOfLines={1}>{employee.designation || "Designation not set"}</Text>
+                    </Box>
+                    <Badge colorScheme={isConfigured ? "green" : "orange"} borderRadius="full" px={2.5} py={1} whiteSpace="nowrap">
+                      {isConfigured ? "Salary configured" : "Not configured"}
+                    </Badge>
+                  </Flex>
+
+                  {salary ? (
+                    <SimpleGrid columns={2} spacing={2} mt={4}>
+                      <SummaryTile title="Monthly CTC" value={formatCurrency(salary.monthlyCtc)} />
+                      <SummaryTile title="Net pay" value={formatCurrency(Number(salary.summary?.netPay || 0))} />
+                      <Box gridColumn="span 2"><Text fontSize="xs" color="text.muted">{salary.appliedTemplateName} · Version {salary.appliedConfigVersion}</Text></Box>
+                    </SimpleGrid>
+                  ) : (
+                    <Flex mt={4} minH="92px" p={3} borderRadius="lg" bg="orange.50" color="orange.800" align="center" gap={2}>
+                      <Lock size={16} />
+                      <Text fontSize="sm">Salary and banking details have not been configured yet.</Text>
+                    </Flex>
+                  )}
+
+                  <HStack mt={4} spacing={2}>
+                    {salary && <SecondaryButton flex="1" size="sm" leftIcon={<Eye size={15} />} onClick={() => { setViewRow(salary); viewModal.onOpen(); }}>View</SecondaryButton>}
+                    <PrimaryButton flex="1" size="sm" leftIcon={salary ? <Edit2 size={15} /> : <Plus size={15} />} onClick={() => {
+                      if (salary) {
+                        setEditRow(salary);
+                        setView("edit");
+                      } else {
+                        setConfigureUserId(employee.user.id);
+                        setView("add");
+                      }
+                    }}>
+                      {salary ? "Edit salary" : "Configure salary"}
+                    </PrimaryButton>
+                  </HStack>
+                  {salary && (
+                    <SecondaryButton
+                      w="100%"
+                      mt={2}
+                      size="sm"
+                      leftIcon={sendingLinkEmployeeId === salary.employeeId ? <Spinner size="xs" /> : <Mail size={15} />}
+                      isDisabled={sendingLinkEmployeeId !== null}
+                      onClick={() => { void sendRowBankingLink(salary); }}
+                    >
+                      Send banking link
+                    </SecondaryButton>
+                  )}
+                </Box>
+              );
+            })}
+          </SimpleGrid>
+        )}
       </SectionCard>
 
       <ViewModal row={viewRow} isOpen={viewModal.isOpen} onClose={viewModal.onClose} />
