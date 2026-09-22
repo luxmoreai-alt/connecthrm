@@ -24,15 +24,15 @@ import {
   ModalCloseButton,
   useDisclosure,
 } from "@chakra-ui/react";
-import { Edit2, Eye, Search, Plus } from "lucide-react";
-import { personalDetailsApi } from "@/api";
+import { BellRing, CheckCircle2, Edit2, Eye, GraduationCap, MapPin, Phone, Plus, Search, UserRound } from "lucide-react";
+import { employeeApi, personalDetailsApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import DataTable, { type Column } from "@/components/ui/DataTable";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/Buttons";
 import { Field, StyledInput, StyledSelect } from "@/components/ui/FormHelpers";
 import EmployeeSelector from "@/components/ui/EmployeeSelector";
-import type { PersonalForm, PersonalDetailsRow } from "@/types";
+import type { EmployeeFromAPI, PersonalForm, PersonalDetailsRow } from "@/types";
 
 const emptyForm: PersonalForm = {
   aadhaarNumber: "",
@@ -522,6 +522,7 @@ function PersonalForm_({
 /* ── Main Page ──────────────────────────────────────────────────── */
 export default function PersonalDetailsPage() {
   const [records, setRecords] = useState<PersonalDetailsRow[]>([]);
+  const [employees, setEmployees] = useState<EmployeeFromAPI[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"list" | "add" | "edit">("list");
@@ -533,8 +534,9 @@ export default function PersonalDetailsPage() {
   const fetchRecords = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await personalDetailsApi.list();
-      setRecords(res.data);
+      const [details, employeeList] = await Promise.all([personalDetailsApi.list(), employeeApi.list()]);
+      setRecords(details.data);
+      setEmployees(employeeList.data.filter((employee) => employee.employmentStatus !== "OFFBOARDED"));
     } catch {
       toast({ title: "Failed to load personal details", status: "error", duration: 3000, isClosable: true });
     } finally {
@@ -546,15 +548,26 @@ export default function PersonalDetailsPage() {
     fetchRecords();
   }, [fetchRecords]);
 
-  const filtered = records.filter((r) => {
-    const q = search.toLowerCase();
-    return (
-      r.employeeName.toLowerCase().includes(q) ||
-      r.empId.toLowerCase().includes(q) ||
-      r.email.toLowerCase().includes(q) ||
-      r.mobileNumber.toLowerCase().includes(q)
-    );
+  const requiredFields: Array<[keyof PersonalForm, string]> = [
+    ["aadhaarNumber", "Aadhaar number"], ["panNumber", "PAN number"], ["mobileNumber", "Mobile number"], ["dateOfBirth", "Date of birth"],
+    ["gender", "Gender"], ["bloodGroup", "Blood group"], ["maritalStatus", "Marital status"], ["nationality", "Nationality"],
+    ["currentAddressLine1", "Current address"], ["currentCity", "City"], ["currentState", "State"], ["currentPincode", "Pincode"], ["currentCountry", "Country"],
+    ["emergencyContactPerson", "Emergency contact person"], ["emergencyContactNumber", "Emergency contact number"], ["emergencyContactRelationship", "Emergency contact relationship"],
+    ["highestQualification", "Highest qualification"], ["institutionName", "Institution"], ["graduationYear", "Graduation year"],
+  ];
+  const cards = employees.map((employee) => {
+    const record = records.find((item) => item.userId === employee.user.id) || null;
+    const missing = requiredFields.filter(([field]) => !String(record?.[field] ?? "").trim()).map(([, label]) => label);
+    return { employee, record, missing };
   });
+  const filtered = cards.filter(({ employee, record }) => {
+    const q = search.toLowerCase();
+    return `${employee.user.firstName} ${employee.user.lastName}`.toLowerCase().includes(q)
+      || (employee.user.empId || "").toLowerCase().includes(q)
+      || employee.user.email.toLowerCase().includes(q)
+      || (record?.mobileNumber || "").toLowerCase().includes(q);
+  });
+  const incompleteCount = cards.filter((card) => card.missing.length > 0).length;
 
   const handleView = (row: PersonalDetailsRow) => {
     setViewRecord(row);
@@ -566,10 +579,24 @@ export default function PersonalDetailsPage() {
     setView("edit");
   };
 
+  const handleCardEdit = (userId: string, record: PersonalDetailsRow | null) => {
+    setEditRecord(record || ({ userId } as PersonalDetailsRow));
+    setView("edit");
+  };
+
   const handleFormDone = () => {
     setView("list");
     setEditRecord(null);
     fetchRecords();
+  };
+
+  const handleReminder = async (employee: EmployeeFromAPI, missing: string[]) => {
+    try {
+      await employeeApi.sendOnboardingLink(employee.id);
+      toast({ title: "Reminder sent", description: `${employee.user.firstName} will receive an email to complete ${missing.length} missing detail${missing.length === 1 ? "" : "s"}.`, status: "success", duration: 4000, isClosable: true });
+    } catch (error: any) {
+      toast({ title: "Could not send reminder", description: error?.message || "Please try again.", status: "error", duration: 4000, isClosable: true });
+    }
   };
 
   const columns: Column<PersonalDetailsRow>[] = [
@@ -696,17 +723,59 @@ export default function PersonalDetailsPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </InputGroup>
-          <Text fontSize="sm" color="text.muted">
-            {filtered.length} record{filtered.length !== 1 ? "s" : ""}
-          </Text>
+          <HStack spacing={3}>
+            <Badge colorScheme={incompleteCount ? "orange" : "green"} borderRadius="full" px={2.5} py={1}>
+              {incompleteCount} need{incompleteCount === 1 ? "s" : ""} attention
+            </Badge>
+            <Text fontSize="sm" color="text.muted">{filtered.length} employee{filtered.length !== 1 ? "s" : ""}</Text>
+          </HStack>
         </Flex>
 
-        <DataTable
-          columns={columns}
-          data={filtered}
-          keyField="id"
-          emptyMessage={loading ? "Loading..." : "No personal details found. Click 'Add New' to add one."}
-        />
+        {loading ? (
+          <Flex minH="240px" align="center" justify="center"><Spinner size="lg" color="brand.500" /></Flex>
+        ) : filtered.length === 0 ? (
+          <Flex minH="180px" align="center" justify="center"><Text color="text.muted">No employees found.</Text></Flex>
+        ) : (
+          <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
+            {filtered.map(({ employee, record, missing }) => {
+              const complete = missing.length === 0;
+              const name = `${employee.user.firstName} ${employee.user.lastName}`;
+              return (
+                <Box key={employee.id} border="1px solid" borderColor={complete ? "green.100" : "orange.200"} borderRadius="xl" p={5} bg="white" boxShadow="sm">
+                  <Flex justify="space-between" gap={3} align="flex-start" mb={4}>
+                    <HStack spacing={3} minW={0}>
+                      <Flex w="42px" h="42px" flexShrink={0} borderRadius="full" bg={complete ? "green.50" : "orange.50"} color={complete ? "green.600" : "orange.600"} align="center" justify="center">
+                        <UserRound size={19} />
+                      </Flex>
+                      <Box minW={0}>
+                        <Text fontWeight="800" color="text.heading" noOfLines={1}>{name}</Text>
+                        <Text fontSize="xs" color="text.muted" noOfLines={1}>{employee.user.email}</Text>
+                      </Box>
+                    </HStack>
+                    <Badge colorScheme={complete ? "green" : "orange"} borderRadius="full" flexShrink={0}>{complete ? "Complete" : `${missing.length} missing`}</Badge>
+                  </Flex>
+                  <Text fontSize="xs" fontWeight="700" color="brand.600" mb={3}>{employee.user.empId || "No employee ID"}</Text>
+                  <SimpleGrid columns={2} spacing={2} fontSize="sm" color="text.body" mb={4}>
+                    <HStack spacing={1.5}><Phone size={14} /><Text noOfLines={1}>{record?.mobileNumber || "Mobile not added"}</Text></HStack>
+                    <HStack spacing={1.5}><MapPin size={14} /><Text noOfLines={1}>{record?.currentCity || "City not added"}</Text></HStack>
+                    <HStack spacing={1.5}><GraduationCap size={14} /><Text noOfLines={1}>{record?.highestQualification || "Qualification not added"}</Text></HStack>
+                    <HStack spacing={1.5}><UserRound size={14} /><Text noOfLines={1}>{record?.gender || "Gender not added"}</Text></HStack>
+                  </SimpleGrid>
+                  {!complete && <Box bg="orange.50" borderRadius="lg" p={3} mb={4}>
+                    <Text fontSize="xs" fontWeight="700" color="orange.800" mb={1}>Still needed</Text>
+                    <Text fontSize="xs" color="orange.800">{missing.slice(0, 4).join(", ")}{missing.length > 4 ? ` and ${missing.length - 4} more` : ""}</Text>
+                  </Box>}
+                  <Flex gap={2} wrap="wrap">
+                    {record && <SecondaryButton size="sm" leftIcon={<Eye size={15} />} onClick={() => handleView(record)}>View</SecondaryButton>}
+                    <SecondaryButton size="sm" leftIcon={<Edit2 size={15} />} onClick={() => handleCardEdit(employee.user.id, record)}>{record ? "Edit" : "Add details"}</SecondaryButton>
+                    {!complete && <PrimaryButton size="sm" leftIcon={<BellRing size={15} />} onClick={() => handleReminder(employee, missing)}>Send reminder</PrimaryButton>}
+                    {complete && <HStack color="green.600" fontSize="sm" fontWeight="700"><CheckCircle2 size={16} /><Text>Ready</Text></HStack>}
+                  </Flex>
+                </Box>
+              );
+            })}
+          </SimpleGrid>
+        )}
       </SectionCard>
 
       <ViewModal isOpen={viewModal.isOpen} onClose={viewModal.onClose} record={viewRecord} />
