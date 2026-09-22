@@ -528,6 +528,7 @@ export default function PersonalDetailsPage() {
   const [view, setView] = useState<"list" | "add" | "edit">("list");
   const [editRecord, setEditRecord] = useState<PersonalDetailsRow | null>(null);
   const [viewRecord, setViewRecord] = useState<PersonalDetailsRow | null>(null);
+  const [reminderState, setReminderState] = useState<{ id: string; status: "sending" | "sent" } | null>(null);
   const viewModal = useDisclosure();
   const toast = useToast();
 
@@ -591,10 +592,16 @@ export default function PersonalDetailsPage() {
   };
 
   const handleReminder = async (employee: EmployeeFromAPI, missing: string[]) => {
+    setReminderState({ id: employee.id, status: "sending" });
     try {
       await employeeApi.sendOnboardingLink(employee.id);
+      setReminderState({ id: employee.id, status: "sent" });
+      window.setTimeout(() => {
+        setReminderState((current) => current?.id === employee.id && current.status === "sent" ? null : current);
+      }, 2500);
       toast({ title: "Reminder sent", description: `${employee.user.firstName} will receive an email to complete ${missing.length} missing detail${missing.length === 1 ? "" : "s"}.`, status: "success", duration: 4000, isClosable: true });
     } catch (error: any) {
+      setReminderState(null);
       toast({ title: "Could not send reminder", description: error?.message || "Please try again.", status: "error", duration: 4000, isClosable: true });
     }
   };
@@ -739,6 +746,8 @@ export default function PersonalDetailsPage() {
           <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>
             {filtered.map(({ employee, record, missing }) => {
               const complete = missing.length === 0;
+              const isSendingReminder = reminderState?.id === employee.id && reminderState.status === "sending";
+              const reminderSent = reminderState?.id === employee.id && reminderState.status === "sent";
               const name = `${employee.user.firstName} ${employee.user.lastName}`;
               return (
                 <Box key={employee.id} border="1px solid" borderColor={complete ? "green.100" : "orange.200"} borderRadius="xl" p={5} bg="white" boxShadow="sm">
@@ -768,7 +777,16 @@ export default function PersonalDetailsPage() {
                   <Flex gap={2} wrap="wrap">
                     {record && <SecondaryButton size="sm" leftIcon={<Eye size={15} />} onClick={() => handleView(record)}>View</SecondaryButton>}
                     <SecondaryButton size="sm" leftIcon={<Edit2 size={15} />} onClick={() => handleCardEdit(employee.user.id, record)}>{record ? "Edit" : "Add details"}</SecondaryButton>
-                    {!complete && <PrimaryButton size="sm" leftIcon={<BellRing size={15} />} onClick={() => handleReminder(employee, missing)}>Send reminder</PrimaryButton>}
+                    {!complete && <PrimaryButton
+                      size="sm"
+                      isLoading={isSendingReminder}
+                      loadingText="Sending..."
+                      leftIcon={reminderSent ? <CheckCircle2 size={15} /> : <BellRing size={15} />}
+                      colorScheme={reminderSent ? "green" : undefined}
+                      onClick={() => handleReminder(employee, missing)}
+                      _hover={!isSendingReminder && !reminderSent ? { transform: "translateY(-2px)", boxShadow: "lg" } : undefined}
+                      transition="all 0.2s ease"
+                    >{reminderSent ? "Reminder sent" : "Send reminder"}</PrimaryButton>}
                     {complete && <HStack color="green.600" fontSize="sm" fontWeight="700"><CheckCircle2 size={16} /><Text>Ready</Text></HStack>}
                   </Flex>
                 </Box>
