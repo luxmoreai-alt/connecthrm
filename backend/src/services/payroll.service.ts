@@ -16,7 +16,7 @@ import { PayrollRecord, PayrollRecordStatus, PayrollSource, PayrollComponent } f
 import { PayrollRunStatus, PayrollRunType } from '../entities/PayrollRun.entity';
 import { ImportJobStatus } from '../entities/PayrollImportJob.entity';
 import { PayrollRepository } from '../repositories/payroll.repository';
-import { generatePayslipPdf, PayslipData } from './pdf.service';
+import { generatePayrollRegisterPdf, generatePayslipPdf, PayslipData } from './pdf.service';
 import { parsePayrollExcel, ParsedRow } from './excel.service';
 import { OrgSettings, AlternateSaturdayRule } from '../entities/OrgSettings.entity';
 import { Holiday } from '../entities/Holiday.entity';
@@ -750,6 +750,11 @@ export class PayrollService {
       month: record.month,
       year: record.year,
     };
+  }
+
+  async deleteRecordsByPeriod(month: number, year: number) {
+    const deletedCount = await this.repo.deleteRecordsByPeriod(month, year);
+    return { month, year, deletedCount };
   }
 
   async releasePayslip(recordId: string) {
@@ -1692,6 +1697,38 @@ export class PayrollService {
         amount: round2(Number(component.amount || 0)),
       }))
       .filter((component) => component.name && component.amount > 0);
+  }
+
+  async exportSalaryPdfReport(
+    month: number,
+    year: number,
+  ): Promise<{ fileName: string; buffer: Buffer }> {
+    const records = await this.repo.findRecords({ month, year });
+    let companyName = 'Connect HR';
+    try {
+      const org = await AppDataSource.getRepository(OrgSettings).findOne({ where: {} });
+      if (org?.companyName) companyName = org.companyName;
+    } catch {
+      // Use the product name when organization branding is unavailable.
+    }
+
+    return generatePayrollRegisterPdf(
+      records.map((record) => {
+        const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+        return {
+          employeeCode: String(snapshot.employeeCode || ''),
+          employeeName: String(snapshot.employeeName || ''),
+          department: String(snapshot.department || ''),
+          grossEarnings: Number(record.grossEarnings) || 0,
+          totalDeductions: Number(record.totalDeductions) || 0,
+          netPay: Number(record.netPay) || 0,
+          status: record.status,
+        };
+      }),
+      month,
+      year,
+      companyName,
+    );
   }
 
   /**

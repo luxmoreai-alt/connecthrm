@@ -48,12 +48,14 @@ router.get('/template', roleMiddleware('ADMIN'), asyncHandler(PayrollController.
 router.get('/sample-payslip', roleMiddleware('ADMIN'), asyncHandler(PayrollController.downloadSamplePayslip));
 router.get('/reports/attendance', roleMiddleware('ADMIN'), asyncHandler(PayrollController.attendanceReport));
 router.get('/reports/salary', roleMiddleware('ADMIN'), asyncHandler(PayrollController.salaryReport));
+router.get('/reports/salary/pdf', roleMiddleware('ADMIN'), asyncHandler(PayrollController.salaryPdfReport));
 router.get('/summary', roleMiddleware('ADMIN'), asyncHandler(PayrollController.summary));
 router.get('/runs', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRuns));
 router.get('/runs/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.runDetail));
 router.post('/runs/system-generate', roleMiddleware('ADMIN'), asyncHandler(PayrollController.bulkGenerate));
 router.post('/runs/:id/dispatch', roleMiddleware('ADMIN'), asyncHandler(PayrollController.dispatchRun));
 router.get('/records', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRecords));
+router.delete('/records', roleMiddleware('ADMIN'), asyncHandler(PayrollController.deleteRecordsByPeriod));
 router.get('/records/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.getRecord));
 router.delete('/records/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.deleteRecord));
 router.get('/records/:id/download', roleMiddleware('ADMIN'), asyncHandler(PayrollController.downloadPayslip));

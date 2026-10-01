@@ -3,6 +3,7 @@ import { EmployeeService } from '../services/employee.service';
 import {
   createEmployeeSchema,
   offboardEmployeeSchema,
+  resetEmployeePasswordSchema,
   updateEmployeeSchema,
 } from '../validators/employee.validator';
 import { ApiResponse } from '../utils/apiResponse';
@@ -81,6 +82,22 @@ export class EmployeeController {
   static async sendBankingDetailsLink(req: Request, res: Response): Promise<void> {
     const result = await employeeService.sendBankingDetailsLink(req.params.id as string);
     ApiResponse.success(res, 'Banking details link sent successfully', result);
+  }
+
+  static async resetPassword(req: Request, res: Response): Promise<void> {
+    const parsed = resetEmployeePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const result = await employeeService.resetEmployeePassword(
+      req.params.id as string,
+      parsed.data.newPassword,
+    );
+    ApiResponse.success(res, 'Employee password reset successfully', result);
   }
 
   static async uploadPhoto(req: Request, res: Response): Promise<void> {

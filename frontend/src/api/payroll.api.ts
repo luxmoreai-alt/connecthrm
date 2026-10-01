@@ -220,6 +220,11 @@ export const payrollApi = {
       `${BASE}/records/${id}`,
     ),
 
+  deleteRecordsByPeriod: (params: { month: number; year: number }) =>
+    api.delete<{ month: number; year: number; deletedCount: number }>(
+      `${BASE}/records?month=${params.month}&year=${params.year}`,
+    ),
+
   emailPayslip: (id: string, data?: { subject?: string; message?: string }) =>
     api.post(`${BASE}/records/${id}/email`, data || {}),
 
@@ -244,6 +249,12 @@ export const payrollApi = {
     api.downloadBlob(
       `${BASE}/reports/salary?month=${params.month}&year=${params.year}`,
       `salary_report_${params.year}_${String(params.month).padStart(2, "0")}.xlsx`,
+    ),
+
+  downloadSalaryPdfReport: (params: { month: number; year: number }) =>
+    api.downloadBlob(
+      `${BASE}/reports/salary/pdf?month=${params.month}&year=${params.year}`,
+      `payroll_register_${params.year}_${String(params.month).padStart(2, "0")}.pdf`,
     ),
 
   downloadPayslipUrl: (id: string) =>

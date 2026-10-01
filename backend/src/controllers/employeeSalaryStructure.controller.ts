@@ -47,6 +47,16 @@ export class EmployeeSalaryStructureController {
     ApiResponse.success(res, 'Employee salary structure retrieved', result);
   }
 
+  static async exportBankingDetails(_req: Request, res: Response): Promise<void> {
+    const result = await service.exportBankingDetails();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    res.send(result.buffer);
+  }
+
   static async getBankingDetailsByEmployee(req: Request, res: Response): Promise<void> {
     const result = await service.getBankingDetails(req.params.userId as string);
     ApiResponse.success(res, 'Employee banking details retrieved', result);

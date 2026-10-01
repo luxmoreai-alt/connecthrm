@@ -45,6 +45,12 @@ export const employeeApi = {
   sendBankingDetailsLink: (id: string) =>
     api.post<{ email: string; sent: boolean }>(`/employees/${id}/send-banking-details-link`),
 
+  resetPassword: (id: string, payload: { newPassword: string; confirmPassword: string }) =>
+    api.post<{ employeeId: string; email: string; sessionsRevoked: boolean }>(
+      `/employees/${id}/reset-password`,
+      payload,
+    ),
+
   uploadPhoto: (id: string, photo: File) => {
     const formData = new FormData();
     formData.append("photo", photo);
@@ -105,6 +111,12 @@ export const salaryDetailsApi = {
 };
 
 export const salaryStructureApi = {
+  downloadBankingDetails: () =>
+    api.downloadBlob(
+      "/salary-structures/export/banking",
+      `employee_banking_details_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    ),
+
   getMyBankingDetails: () =>
     api.get<EmployeeBankingDetails>("/salary-structures/me/banking"),
 

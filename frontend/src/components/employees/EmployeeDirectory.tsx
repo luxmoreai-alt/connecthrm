@@ -48,6 +48,7 @@ import {
   FileText,
   Mail,
   MapPin,
+  KeyRound,
   Plus,
   Search,
   Upload,
@@ -627,7 +628,7 @@ function EmployeeForm({
   );
 }
 
-function EmployeeCard({ row, onView, onEdit, onDelete }: { row: EmployeeRow; onView: () => void; onEdit: () => void; onDelete: () => void }) {
+function EmployeeCard({ row, onView, onEdit, onDelete, onResetPassword }: { row: EmployeeRow; onView: () => void; onEdit: () => void; onDelete: () => void; onResetPassword: () => void }) {
   const employee = row.raw;
   return (
     <Box bg="white" border="1px solid" borderColor="surface.border" borderRadius="xl" overflow="hidden" boxShadow="card" transition="all .22s ease" _hover={{ transform: "translateY(-3px)", boxShadow: "card-hover", borderColor: "brand.200" }}>
@@ -659,6 +660,15 @@ function EmployeeCard({ row, onView, onEdit, onDelete }: { row: EmployeeRow; onV
           <SecondaryButton size="sm" leftIcon={<Edit2 size={15} />} onClick={onEdit}>Edit</SecondaryButton>
           <SecondaryButton size="sm" color="red.600" borderColor="red.200" leftIcon={<Trash2 size={15} />} onClick={onDelete}>Delete</SecondaryButton>
         </SimpleGrid>
+        <SecondaryButton
+          size="sm"
+          w="full"
+          mt={2.5}
+          leftIcon={<KeyRound size={15} />}
+          onClick={onResetPassword}
+        >
+          Reset password
+        </SecondaryButton>
       </Box>
     </Box>
   );
@@ -675,9 +685,14 @@ export default function EmployeeDirectory() {
   const [selected, setSelected] = useState<EmployeeFromAPI | null>(null);
   const [deleteRow, setDeleteRow] = useState<EmployeeRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [resetRow, setResetRow] = useState<EmployeeRow | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [created, setCreated] = useState<{ empId: string; generatedPassword: string; emailSent: boolean; emailError?: string } | null>(null);
   const modal = useDisclosure();
   const deleteModal = useDisclosure();
+  const resetPasswordModal = useDisclosure();
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -724,6 +739,40 @@ export default function EmployeeDirectory() {
     }
   };
 
+  const closeResetPassword = () => {
+    if (resettingPassword) return;
+    resetPasswordModal.onClose();
+    setResetRow(null);
+    setNewPassword("");
+    setConfirmPassword("");
+  };
+
+  const resetEmployeePassword = async () => {
+    if (!resetRow) return;
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords do not match", status: "warning" });
+      return;
+    }
+
+    setResettingPassword(true);
+    try {
+      await employeeApi.resetPassword(resetRow.profileId, { newPassword, confirmPassword });
+      resetPasswordModal.onClose();
+      toast({
+        title: "Password reset successfully",
+        description: `${resetRow.name} has been signed out and must use the new password.`,
+        status: "success",
+      });
+      setResetRow(null);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      toast({ title: "Could not reset password", description: error?.message, status: "error" });
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const departments = useMemo(() => Array.from(new Set(employees.map((item) => item.department))).sort(), [employees]);
   const visible = useMemo(() => employees
     .filter((item) => {
@@ -764,10 +813,42 @@ export default function EmployeeDirectory() {
         </Flex>
         <Flex justify="space-between" mb={4}><Text fontWeight="800" color="text.heading">Team members</Text><Text fontSize="sm" color="text.muted">{visible.length} employee{visible.length === 1 ? "" : "s"}</Text></Flex>
         {loading ? <Center py={16}><Spinner color="brand.500" size="lg" /></Center> : visible.length === 0 ? <Center py={16} flexDirection="column"><UserRound size={32} color="#708399" /><Text mt={3} color="text.muted">No employees match your search.</Text></Center> : (
-          <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>{visible.map((row) => <EmployeeCard key={row.profileId} row={row} onView={() => { setSelected(row.raw); modal.onOpen(); }} onEdit={() => { setEditRow(row); setScreen("edit"); }} onDelete={() => { setDeleteRow(row); deleteModal.onOpen(); }} />)}</SimpleGrid>
+          <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={4}>{visible.map((row) => <EmployeeCard key={row.profileId} row={row} onView={() => { setSelected(row.raw); modal.onOpen(); }} onEdit={() => { setEditRow(row); setScreen("edit"); }} onDelete={() => { setDeleteRow(row); deleteModal.onOpen(); }} onResetPassword={() => { setResetRow(row); resetPasswordModal.onOpen(); }} />)}</SimpleGrid>
         )}
       </SectionCard>
       <EmployeeDetailsModal isOpen={modal.isOpen} onClose={modal.onClose} employee={selected} />
+      <Modal isOpen={resetPasswordModal.isOpen} onClose={closeResetPassword} isCentered>
+        <ModalOverlay bg="rgba(6,31,58,.58)" backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader>
+            <HStack color="brand.700"><KeyRound size={20} /><Text>Reset employee password</Text></HStack>
+          </ModalHeader>
+          <ModalCloseButton isDisabled={resettingPassword} />
+          <ModalBody>
+            <Alert status="warning" borderRadius="lg" mb={5}>
+              <AlertIcon />
+              <AlertDescription>
+                Reset the password for <strong>{resetRow?.name}</strong>. All current sessions for this employee will be signed out.
+              </AlertDescription>
+            </Alert>
+            <FormControl isRequired>
+              <FormLabel>New password</FormLabel>
+              <Input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Enter a secure password" />
+              <Text mt={2} fontSize="xs" color="text.muted">At least 8 characters with uppercase, lowercase, number, and special character.</Text>
+            </FormControl>
+            <FormControl isRequired mt={4} isInvalid={Boolean(confirmPassword && newPassword !== confirmPassword)}>
+              <FormLabel>Confirm new password</FormLabel>
+              <Input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter the new password" />
+            </FormControl>
+          </ModalBody>
+          <ModalFooter gap={3}>
+            <SecondaryButton onClick={closeResetPassword} isDisabled={resettingPassword}>Cancel</SecondaryButton>
+            <PrimaryButton leftIcon={<KeyRound size={16} />} onClick={resetEmployeePassword} isLoading={resettingPassword} isDisabled={!newPassword || !confirmPassword}>
+              Reset password
+            </PrimaryButton>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
       <Modal isOpen={deleteModal.isOpen} onClose={() => { if (!deleting) { deleteModal.onClose(); setDeleteRow(null); } }} isCentered>
         <ModalOverlay bg="rgba(6,31,58,.58)" backdropFilter="blur(4px)" />
         <ModalContent borderRadius="xl">

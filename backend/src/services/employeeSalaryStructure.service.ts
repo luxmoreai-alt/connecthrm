@@ -16,6 +16,7 @@ import {
   StatutoryComponentSide,
 } from '../salary/salary.enums';
 import { SalaryPreviewInput } from '../salary/salary.types';
+import * as XLSX from 'xlsx';
 
 interface CustomEmployeeComponentInput {
   componentName: string;
@@ -93,6 +94,83 @@ export class EmployeeSalaryStructureService {
     const row = await this.structureRepo.findLatestByEmployee(userId);
     if (!row) return null;
     return this.formatStructure(row);
+  }
+
+  async exportBankingDetails(): Promise<{ fileName: string; buffer: Buffer }> {
+    const [employees, structures, legacySalaries] = await Promise.all([
+      this.employeeRepo.findAll(),
+      this.structureRepo.listLatestByEmployee(),
+      this.salaryDetailsRepo.findAll(),
+    ]);
+    const structureByEmployee = new Map(structures.map((row) => [row.employeeId, row]));
+    const legacyByEmployee = new Map(legacySalaries.map((row) => [row.userId, row]));
+    const header = [
+      'Employee ID',
+      'Employee Name',
+      'Email',
+      'Department',
+      'Designation',
+      'Account Holder Name',
+      'Bank Name',
+      'Account Number',
+      'IFSC Code',
+      'Banking Mobile',
+      'Branch Name',
+      'PAN Number',
+      'UAN Number',
+      'ESI Number',
+      'Monthly CTC',
+      'Net Salary',
+      'Banking Status',
+    ];
+    const rows = employees
+      .filter((employee) => !employee.user.deletedAt)
+      .map((employee) => {
+        const structure = structureByEmployee.get(employee.userId);
+        const legacy = legacyByEmployee.get(employee.userId);
+        const banking = (structure?.bankingInfo || {}) as Record<string, unknown>;
+        const legacyEarnings = (legacy?.earnings || []).reduce(
+          (sum, component) => sum + Number(component.amount || 0),
+          0,
+        );
+        const legacyDeductions = (legacy?.deductions || []).reduce(
+          (sum, component) => sum + Number(component.amount || 0),
+          0,
+        );
+        const accountNumber = String(banking.accountNumber || legacy?.accountNumber || '');
+        const ifscCode = String(banking.ifscCode || legacy?.ifscCode || '');
+        return [
+          employee.user.empId || '',
+          `${employee.user.firstName} ${employee.user.lastName}`.trim(),
+          employee.user.email,
+          employee.department,
+          employee.designation,
+          String(banking.accountHolderName || legacy?.accountHolderName || ''),
+          String(banking.bankName || legacy?.bankName || ''),
+          accountNumber,
+          ifscCode,
+          String(banking.mobileNumber || legacy?.bankMobileNumber || ''),
+          String(banking.branchName || legacy?.branchName || ''),
+          String(banking.panNumber || legacy?.panNumber || ''),
+          String(banking.uanNumber || legacy?.uanNumber || ''),
+          String(banking.esiNumber || legacy?.esiNumber || ''),
+          Number(structure?.monthlyCtc || (Number(legacy?.ctc || 0) / 12)) || 0,
+          Number(structure?.summary?.netPay ?? (legacyEarnings - legacyDeductions)) || 0,
+          accountNumber && ifscCode ? 'Submitted' : 'Pending',
+        ];
+      });
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    worksheet['!cols'] = header.map((label, index) => ({
+      wch: index === 1 || index === 2 ? 28 : Math.max(label.length + 2, 16),
+    }));
+    worksheet['!autofilter'] = { ref: `A1:Q${Math.max(1, rows.length + 1)}` };
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Banking Details');
+    return {
+      fileName: `employee_banking_details_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+    };
   }
 
   async getBankingDetails(userId: string) {

@@ -123,6 +123,11 @@ export class PayrollRepository {
     await this.recordRepo.delete(id);
   }
 
+  async deleteRecordsByPeriod(month: number, year: number): Promise<number> {
+    const result = await this.recordRepo.delete({ month, year });
+    return result.affected || 0;
+  }
+
   async countRecords(filters?: {
     month?: number;
     year?: number;

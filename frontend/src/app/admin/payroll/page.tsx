@@ -49,6 +49,7 @@ import {
   Trash2,
   Plus,
   FileSpreadsheet,
+  FileText,
   Search,
   Send,
   CheckCircle2,
@@ -130,8 +131,12 @@ export default function PayrollPage() {
   const [releasingId, setReleasingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
   const deleteDisclosure = useDisclosure();
+  const deleteAllDisclosure = useDisclosure();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const cancelDeleteAllRef = useRef<HTMLButtonElement>(null);
 
   const columns = useMemo<Column<PayrollRecordType>[]>(
     () => [
@@ -325,6 +330,38 @@ export default function PayrollPage() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    setDeletingAll(true);
+    try {
+      const result = await payrollApi.deleteRecordsByPeriod({ month, year });
+      toast({
+        title: "Monthly payroll records deleted",
+        description: `${result.deletedCount} record${result.deletedCount === 1 ? "" : "s"} deleted for ${MONTHS[month - 1]} ${year}.`,
+        status: "success",
+        duration: 3500,
+        isClosable: true,
+      });
+      deleteAllDisclosure.onClose();
+      await fetchData();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const handleExport = async (format: "excel" | "pdf") => {
+    setExporting(format);
+    try {
+      if (format === "excel") await payrollApi.downloadSalaryReport({ month, year });
+      else await payrollApi.downloadSalaryPdfReport({ month, year });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Box>
       <PageHeader title="Payroll" subtitle="Manage payslips and salary processing" />
@@ -380,7 +417,7 @@ export default function PayrollPage() {
           <TabPanel px={0}>
             <SectionCard title={`Payroll Records — ${MONTHS[month - 1]} ${year}`} noPadding>
               <Box px={5} pb={5}>
-                <Flex mb={4} gap={3} align="center">
+                <Flex mb={4} gap={3} align={{ base: "stretch", lg: "center" }} direction={{ base: "column", lg: "row" }}>
                   <StyledInput
                     placeholder="Search employee..."
                     value={search}
@@ -388,6 +425,36 @@ export default function PayrollPage() {
                     maxW="300px"
                   />
                   {loading && <Spinner size="sm" color="brand.400" />}
+                  <Flex gap={2} ml={{ lg: "auto" }} flexWrap="wrap">
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<FileSpreadsheet size={15} />}
+                      isLoading={exporting === "excel"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleExport("excel"); }}
+                    >
+                      Export Excel
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<FileText size={15} />}
+                      isLoading={exporting === "pdf"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleExport("pdf"); }}
+                    >
+                      Export PDF
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      color="red.600"
+                      borderColor="red.200"
+                      leftIcon={<Trash2 size={15} />}
+                      isDisabled={!summary?.totalRecords}
+                      onClick={deleteAllDisclosure.onOpen}
+                    >
+                      Delete month
+                    </SecondaryButton>
+                  </Flex>
                 </Flex>
                 <DataTable<PayrollRecordType> columns={columns} data={records} keyField="id" />
               </Box>
@@ -395,6 +462,29 @@ export default function PayrollPage() {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      <AlertDialog
+        isOpen={deleteAllDisclosure.isOpen}
+        leastDestructiveRef={cancelDeleteAllRef}
+        onClose={deleteAllDisclosure.onClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent borderRadius="xl">
+            <AlertDialogHeader fontSize="lg" fontWeight="700">Delete all monthly payroll records</AlertDialogHeader>
+            <AlertDialogBody>
+              Delete all <strong>{summary?.totalRecords || 0}</strong> payroll records for <strong>{MONTHS[month - 1]} {year}</strong>? This removes the payslips from employee portals and allows payroll to be generated again.
+              <Text mt={3} color="red.600" fontWeight="600">This action cannot be undone.</Text>
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelDeleteAllRef} onClick={deleteAllDisclosure.onClose} size="sm" isDisabled={deletingAll}>Cancel</Button>
+              <Button colorScheme="red" onClick={handleDeleteAll} isLoading={deletingAll} ml={3} size="sm">
+                Delete all records
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
 
       <AlertDialog
         isOpen={deleteDisclosure.isOpen}

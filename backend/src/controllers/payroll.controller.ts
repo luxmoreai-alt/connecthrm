@@ -169,6 +169,18 @@ export class PayrollController {
     ApiResponse.success(res, 'Payslip deleted successfully', result);
   }
 
+  static async deleteRecordsByPeriod(req: Request, res: Response): Promise<void> {
+    const parsed = salaryReportSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const result = await payrollService.deleteRecordsByPeriod(parsed.data.month, parsed.data.year);
+    ApiResponse.success(res, 'Monthly payroll records deleted successfully', result);
+  }
+
   // ─── Admin: Email payslip ───
   static async emailPayslip(req: Request, res: Response): Promise<void> {
     const parsed = emailPayslipSchema.safeParse(req.body || {});
@@ -233,6 +245,20 @@ export class PayrollController {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     res.setHeader('Content-Disposition', `attachment; filename=${result.fileName}`);
+    res.send(result.buffer);
+  }
+
+  static async salaryPdfReport(req: Request, res: Response): Promise<void> {
+    const parsed = salaryReportSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const result = await payrollService.exportSalaryPdfReport(parsed.data.month, parsed.data.year);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
     res.send(result.buffer);
   }
 

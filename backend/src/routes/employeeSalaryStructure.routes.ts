@@ -13,6 +13,7 @@ router.put('/me/banking', roleMiddleware('EMPLOYEE'), asyncHandler(EmployeeSalar
 
 router.use(roleMiddleware('ADMIN'));
 
+router.get('/export/banking', asyncHandler(EmployeeSalaryStructureController.exportBankingDetails));
 router.get('/', asyncHandler(EmployeeSalaryStructureController.list));
 router.get('/user/:userId/banking', asyncHandler(EmployeeSalaryStructureController.getBankingDetailsByEmployee));
 router.get('/user/:userId', asyncHandler(EmployeeSalaryStructureController.getLatestByEmployee));

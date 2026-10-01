@@ -25,7 +25,7 @@ import {
   useToast,
   VStack,
 } from "@chakra-ui/react";
-import { Edit2, Eye, Info, Lock, Mail, Plus, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
+import { Download, Edit2, Eye, Info, Lock, Mail, Plus, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
 import { employeeApi, salaryStructureApi, settingsApi } from "@/api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -1496,6 +1496,7 @@ export default function SalaryBankingPage() {
   const [viewRow, setViewRow] = useState<EmployeeSalaryStructureRow | null>(null);
   const [configureUserId, setConfigureUserId] = useState("");
   const [sendingLinkEmployeeId, setSendingLinkEmployeeId] = useState<string | null>(null);
+  const [downloadingBanking, setDownloadingBanking] = useState(false);
 
   const fetchRows = useCallback(async () => {
     try {
@@ -1555,6 +1556,18 @@ export default function SalaryBankingPage() {
     }
   };
 
+  const downloadBankingDetails = async () => {
+    try {
+      setDownloadingBanking(true);
+      await salaryStructureApi.downloadBankingDetails();
+      toast({ title: "Banking details downloaded", status: "success", duration: 2500, isClosable: true });
+    } catch (err: any) {
+      toast({ title: "Could not download banking details", description: err?.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setDownloadingBanking(false);
+    }
+  };
+
   if (view === "add") {
     return (
       <Box>
@@ -1580,7 +1593,14 @@ export default function SalaryBankingPage() {
       <PageHeader
         title="Salary & Banking"
         subtitle="Review salary setup for every employee and configure banking details."
-        actions={<PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => { setConfigureUserId(""); setView("add"); }}>Configure Salary</PrimaryButton>}
+        actions={
+          <HStack spacing={2}>
+            <SecondaryButton size="sm" leftIcon={<Download size={16} />} isLoading={downloadingBanking} onClick={() => { void downloadBankingDetails(); }}>
+              Download banking Excel
+            </SecondaryButton>
+            <PrimaryButton size="sm" leftIcon={<Plus size={16} />} onClick={() => { setConfigureUserId(""); setView("add"); }}>Configure Salary</PrimaryButton>
+          </HStack>
+        }
       />
 
       <SectionCard>

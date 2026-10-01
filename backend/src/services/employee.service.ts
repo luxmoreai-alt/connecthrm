@@ -607,6 +607,24 @@ export class EmployeeService {
     return { email: profile.user.email, sent: true };
   }
 
+  async resetEmployeePassword(id: string, newPassword: string) {
+    const profile = await this.employeeRepo.findById(id) ?? await this.employeeRepo.findByUserId(id);
+    if (!profile || profile.user.deletedAt) {
+      throw ApiError.notFound('Employee not found', 'EMPLOYEE_NOT_FOUND');
+    }
+
+    await this.userRepo.update(profile.userId, {
+      password: await hashPassword(newPassword),
+    });
+    await this.tokenService.revokeAllUserTokens(profile.userId);
+
+    return {
+      employeeId: profile.userId,
+      email: profile.user.email,
+      sessionsRevoked: true,
+    };
+  }
+
   async updateProfilePhoto(id: string, file: Express.Multer.File) {
     const profile = await this.employeeRepo.findById(id);
     if (!profile || profile.user.deletedAt) {
