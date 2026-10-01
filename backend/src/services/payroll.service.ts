@@ -341,8 +341,19 @@ export class PayrollService {
     const attendance = await this.computeAttendance(user.id, month, year, profile?.dateOfJoining);
 
     // Smart merge: Excel fields override system, missing fields fallback to system
-    const earnings = this.mergeEarnings(row.earnings, salary, salaryStructure);
-    const deductions = this.mergeDeductions(row.deductions, salary, salaryStructure);
+    const prorationFactor = this.getJoiningMonthProrationFactor(attendance);
+    const earnings = row.earnings.length > 0
+      ? this.mergeEarnings(row.earnings, salary, salaryStructure)
+      : this.prorateComponents(
+          this.mergeEarnings([], salary, salaryStructure),
+          prorationFactor,
+        );
+    const deductions = row.deductions.length > 0
+      ? this.mergeDeductions(row.deductions, salary, salaryStructure)
+      : this.prorateComponents(
+          this.mergeDeductions([], salary, salaryStructure),
+          prorationFactor,
+        );
 
     // Determine effective LOP days (Excel override or system computed)
     const effectiveLopDays = row.lopDays ?? attendance.lopDays;
@@ -350,7 +361,9 @@ export class PayrollService {
     // Auto-add LOP deduction if applicable (same logic as previewPayroll)
     if (effectiveLopDays > 0) {
       const basic = earnings.find((e) => e.name.toLowerCase() === 'basic');
-      const effectiveEligibleDays = row.workingDays ?? attendance.eligibleWorkingDays;
+      const effectiveEligibleDays = row.earnings.length > 0
+        ? row.workingDays ?? attendance.eligibleWorkingDays
+        : attendance.eligibleWorkingDays;
       if (basic && effectiveEligibleDays > 0) {
         const perDaySalary = basic.amount / effectiveEligibleDays;
         const lopDeduction = round2(perDaySalary * effectiveLopDays);
@@ -361,7 +374,10 @@ export class PayrollService {
     }
 
     // Auto-add PF Employee Contribution if applicable and not already present
-    const pfEmployeeContribution = this.extractPfEmployeeContribution(salary, salaryStructure);
+    const pfEmployeeContribution = round2(
+      this.extractPfEmployeeContribution(salary, salaryStructure) *
+        (row.deductions.length > 0 ? 1 : prorationFactor),
+    );
     if (pfEmployeeContribution > 0 && !deductions.some((d) => d.name.toLowerCase().includes('pf'))) {
       deductions.push({ name: 'PF (Employee)', amount: pfEmployeeContribution });
     }
@@ -370,7 +386,9 @@ export class PayrollService {
     const pfEmployerContribution =
       row.pfEmployerContribution != null
         ? round2(row.pfEmployerContribution)
-        : this.extractPfEmployerContribution(salary, salaryStructure);
+        : round2(
+            this.extractPfEmployerContribution(salary, salaryStructure) * prorationFactor,
+          );
 
     const grossEarnings = round2(earnings.reduce((s, e) => s + e.amount, 0));
     const totalDeductions = round2(deductions.reduce((s, d) => s + d.amount, 0));
@@ -1179,8 +1197,15 @@ export class PayrollService {
       profile?.dateOfJoining,
     );
 
-    const earnings = this.mergeEarnings([], salary, salaryStructure);
-    const deductions = this.mergeDeductions([], salary, salaryStructure);
+    const prorationFactor = this.getJoiningMonthProrationFactor(attendance);
+    const earnings = this.prorateComponents(
+      this.mergeEarnings([], salary, salaryStructure),
+      prorationFactor,
+    );
+    const deductions = this.prorateComponents(
+      this.mergeDeductions([], salary, salaryStructure),
+      prorationFactor,
+    );
 
     const lopDays = Number(attendance.lopDays) || 0;
     if (lopDays > 0 && attendance.eligibleWorkingDays > 0) {
@@ -1196,9 +1221,8 @@ export class PayrollService {
       deductions.push({ name: 'LOP Deduction', amount: lopDeduction });
     }
 
-    const pfEmployeeContribution = this.extractPfEmployeeContribution(
-      salary,
-      salaryStructure,
+    const pfEmployeeContribution = round2(
+      this.extractPfEmployeeContribution(salary, salaryStructure) * prorationFactor,
     );
     if (
       pfEmployeeContribution > 0 &&
@@ -1210,9 +1234,8 @@ export class PayrollService {
       });
     }
 
-    const pfEmployerContribution = this.extractPfEmployerContribution(
-      salary,
-      salaryStructure,
+    const pfEmployerContribution = round2(
+      this.extractPfEmployerContribution(salary, salaryStructure) * prorationFactor,
     );
 
     const grossEarnings = round2(earnings.reduce((s, e) => s + Number(e.amount || 0), 0));
@@ -1669,6 +1692,29 @@ export class PayrollService {
         amount: round2(Number(component.amount || 0)),
       }))
       .filter((component) => component.name && component.amount > 0);
+  }
+
+  /**
+   * Salary structures contain full-month values. In an employee's joining
+   * month, pay only the working days for which they were employed. Attendance
+   * LOP is applied separately after this proration.
+   */
+  private getJoiningMonthProrationFactor(attendance: AttendanceComputation): number {
+    if (attendance.workingDays <= 0) return 0;
+    return Math.min(1, Math.max(0, attendance.eligibleWorkingDays / attendance.workingDays));
+  }
+
+  private prorateComponents(
+    components: PayrollComponent[],
+    factor: number,
+  ): PayrollComponent[] {
+    if (factor >= 1) return components;
+    return components
+      .map((component) => ({
+        ...component,
+        amount: round2(Number(component.amount || 0) * factor),
+      }))
+      .filter((component) => component.amount > 0);
   }
 
   private findComponentAmount(components: PayrollComponent[], tokens: string[]): number {
