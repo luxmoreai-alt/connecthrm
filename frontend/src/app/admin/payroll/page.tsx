@@ -213,16 +213,14 @@ export default function PayrollPage() {
               </Tooltip>
             )}
             {row.hasPayslip && !row.isReleased && (
-              <Tooltip label="Release to Employee Portal" hasArrow>
-                <SecondaryButton
-                  size="xs"
-                  leftIcon={<Send size={13} />}
-                  isLoading={releasingId === row.id}
-                  onClick={() => handleRelease(row.id)}
-                >
-                  Release
-                </SecondaryButton>
-              </Tooltip>
+              <SecondaryButton
+                size="xs"
+                leftIcon={<Send size={13} />}
+                isLoading={releasingId === row.id}
+                onClick={() => handleRelease(row.id)}
+              >
+                Release
+              </SecondaryButton>
             )}
             {row.isReleased && (
               <Tooltip label="Released to employee" hasArrow>
