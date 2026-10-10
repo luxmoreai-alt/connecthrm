@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Box,
   Flex,
@@ -355,7 +356,14 @@ export default function LoginPage() {
             </VStack>
           </form>
 
-         
+          <Flex mt={7} pt={5} borderTop="1px solid" borderColor="surface.border" justify="center" gap={4}>
+            <Link href="/privacy-policy" style={{ color: "#0B72E7", fontSize: "13px", fontWeight: 700 }}>
+              Privacy Policy
+            </Link>
+            <Link href="/privacy-policy#data-deletion" style={{ color: "#526D82", fontSize: "13px", fontWeight: 600 }}>
+              Data requests
+            </Link>
+          </Flex>
 
       
         </Box>

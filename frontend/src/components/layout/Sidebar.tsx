@@ -16,7 +16,7 @@ import {
 } from "@chakra-ui/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, ChevronLeft, ChevronRight, ChevronDown, Menu as MenuIcon, X } from "lucide-react";
+import { LogOut, ChevronLeft, ChevronRight, ChevronDown, Menu as MenuIcon, ShieldCheck, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { adminRoutes, employeeRoutes, type RouteItem } from "@/lib/routes";
 import { useAuth } from "@/context/AuthContext";
@@ -260,6 +260,25 @@ function SidebarContent({
 
       {/* Logout */}
       <Box px={2} pb={4} flexShrink={0}>
+        <Link href="/privacy-policy" onClick={onNavigate}>
+          <Flex
+            align="center"
+            gap={3}
+            px={3}
+            py={2.5}
+            borderRadius="xl"
+            color="text.muted"
+            fontWeight="500"
+            fontSize="sm"
+            _hover={{ bg: "brand.50", color: "brand.400" }}
+            w="100%"
+            justify={collapsed ? "center" : "flex-start"}
+            title={collapsed ? "Privacy Policy" : undefined}
+          >
+            <ShieldCheck size={20} aria-hidden="true" />
+            {!collapsed && <Text>Privacy Policy</Text>}
+          </Flex>
+        </Link>
         <Flex
           as="button"
           align="center"

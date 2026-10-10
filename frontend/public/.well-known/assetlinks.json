@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.connecthr.hrms",
+      "sha256_cert_fingerprints": [
+        "2B:02:BB:92:19:6F:A1:84:44:B1:45:1B:EE:5A:A1:F4:0D:EB:30:5C:A5:2E:01:F3:32:13:91:FB:4C:B0:8C:39"
+      ]
+    }
+  }
+]

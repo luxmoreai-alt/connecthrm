@@ -1,1 +1,9 @@
 .run/
+
+# Android build outputs and private upload credentials
+android/.gradle/
+android/local.properties
+android/keystore.properties
+android/keystore/
+android/app/build/
+*.aab
