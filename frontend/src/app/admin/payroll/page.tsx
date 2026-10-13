@@ -621,6 +621,13 @@ function ManualPayrollTab({
   const [deletingGenerated, setDeletingGenerated] = useState(false);
   const toast = useToast();
 
+  useEffect(() => {
+    setPreview(null);
+    setEarnings([]);
+    setDeductions([]);
+    setGeneratedRecord(null);
+  }, [month, year]);
+
   const handlePreview = async () => {
     if (!employeeId) return;
     setGeneratedRecord(null);
@@ -711,7 +718,7 @@ function ManualPayrollTab({
 
   return (
     <SectionCard title="Manual Payroll Generation">
-      <EmployeeSelector value={employeeId} onChange={(value) => { setEmployeeId(value); setGeneratedRecord(null); }} />
+      <EmployeeSelector value={employeeId} onChange={(value) => { setEmployeeId(value); setPreview(null); setEarnings([]); setDeductions([]); setGeneratedRecord(null); }} />
       <PrimaryButton size="sm" onClick={handlePreview} isLoading={loading} isDisabled={!employeeId} mb={5}>
         Preview Payroll
       </PrimaryButton>
@@ -723,6 +730,10 @@ function ManualPayrollTab({
             <Box>
               <Text fontSize="xs" color="text.muted">Employee</Text>
               <Text fontSize="sm" fontWeight="600">{preview.employeeName} ({preview.employeeCode})</Text>
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="text.muted">Payroll Period</Text>
+              <Text fontSize="sm" fontWeight="700" color="brand.600">{MONTHS[preview.month - 1]} {preview.year}</Text>
             </Box>
             <Box>
               <Text fontSize="xs" color="text.muted">Department / Designation</Text>

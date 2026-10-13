@@ -20,6 +20,7 @@ import { generatePayrollRegisterPdf, generatePayslipPdf, PayslipData } from './p
 import { parsePayrollExcel, ParsedRow } from './excel.service';
 import { OrgSettings, AlternateSaturdayRule } from '../entities/OrgSettings.entity';
 import { Holiday } from '../entities/Holiday.entity';
+import { ShiftAssignment } from '../entities/ShiftAssignment.entity';
 import { ApiError } from '../utils/apiError';
 import { env } from '../config/env';
 import { transporter } from '../config/mail';
@@ -1331,6 +1332,7 @@ export class PayrollService {
     const attRepo = AppDataSource.getRepository(Attendance);
     const leaveRepo = AppDataSource.getRepository(LeaveRequest);
     const holidayRepo = AppDataSource.getRepository(Holiday);
+    const shiftAssignmentRepo = AppDataSource.getRepository(ShiftAssignment);
 
     const lastDay = new Date(year, month, 0).getDate();
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -1351,11 +1353,19 @@ export class PayrollService {
       // fallback defaults
     }
 
-    const holidays = await holidayRepo
-      .createQueryBuilder('h')
-      .where('h.date >= :start AND h.date <= :end', { start: startDate, end: endDate })
-      .getMany();
+    const [holidays, shiftAssignments] = await Promise.all([
+      holidayRepo
+        .createQueryBuilder('h')
+        .where('h.date >= :start AND h.date <= :end', { start: startDate, end: endDate })
+        .getMany(),
+      shiftAssignmentRepo
+        .createQueryBuilder('sa')
+        .where('sa.employeeId = :employeeId', { employeeId })
+        .andWhere('sa.shiftDate >= :start AND sa.shiftDate <= :end', { start: startDate, end: endDate })
+        .getMany(),
+    ]);
     const holidaySet = new Set(holidays.map((h) => h.date));
+    const allocatedShiftDates = new Set(shiftAssignments.map((assignment) => assignment.shiftDate));
 
     const DAY_NAMES = [
       'SUNDAY',
@@ -1377,6 +1387,7 @@ export class PayrollService {
       )}`;
 
       if (holidaySet.has(dateStr)) return 'HOLIDAY';
+      if (allocatedShiftDates.has(dateStr)) return 'WORKING';
       if (dayName !== 'SATURDAY' && weekOffDays.includes(dayName)) return 'WEEK_OFF';
 
       if (dayName === 'SATURDAY') {
@@ -1476,6 +1487,7 @@ export class PayrollService {
     let totalBreakMinutes = 0;
     let totalLateMinutes = 0;
     let regularizationCount = 0;
+    const attendanceByDate = new Map(attendances.map((attendance) => [attendance.date, attendance]));
 
     for (const attendance of attendances) {
       totalWorkedMinutes += Number(attendance.totalWorkMinutes || 0);
@@ -1485,18 +1497,22 @@ export class PayrollService {
 
       switch (attendance.status) {
         case AttendanceStatus.PRESENT:
-        case AttendanceStatus.LATE:
         case AttendanceStatus.PERMISSION:
         case AttendanceStatus.REGULARIZED:
-        case AttendanceStatus.EARLY_OUT:
         case AttendanceStatus.OVERTIME:
           presentDays += 1;
           break;
         case AttendanceStatus.HALF_DAY:
+        case AttendanceStatus.LATE:
+        case AttendanceStatus.EARLY_OUT:
+        case AttendanceStatus.MISSED_CHECK_IN:
+        case AttendanceStatus.MISSING_PUNCH:
           presentDays += 0.5;
           lopDays += 0.5;
           break;
         case AttendanceStatus.LOP:
+        case AttendanceStatus.ABSENT:
+        case AttendanceStatus.NOT_STARTED:
           lopDays += 1;
           break;
         case AttendanceStatus.LEAVE:
@@ -1509,6 +1525,7 @@ export class PayrollService {
 
     let permissionHours = 0;
     let permissionCount = 0;
+    const approvedLeaveDates = new Set<string>();
     for (const leave of approvedLeaves) {
       const effectiveType = leave.approvedLeaveType || leave.leaveType;
       if (leave.requestMode === RequestMode.PERMISSION || effectiveType === LeaveType.PERMISSION) {
@@ -1524,8 +1541,37 @@ export class PayrollService {
           : leave.date
             ? 1
             : 0);
+      const coverageStart = leave.startDate || leave.date;
+      const coverageEnd = leave.endDate || leave.date;
+      if (coverageStart && coverageEnd) {
+        const cursor = new Date(`${coverageStart}T00:00:00.000Z`);
+        const last = new Date(`${coverageEnd}T00:00:00.000Z`);
+        while (cursor.getTime() <= last.getTime()) {
+          const coveredDate = cursor.toISOString().slice(0, 10);
+          if (coveredDate >= eligibleStartDate && coveredDate <= endDate) {
+            approvedLeaveDates.add(coveredDate);
+          }
+          cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+      }
       if (effectiveType === LeaveType.LOP) lopDays += totalDays;
       else leaveDays += totalDays;
+    }
+
+    // Calendar views synthesize past, unpunched working days as LOP even when
+    // no Attendance row was persisted. Payroll must apply the same rule.
+    const today = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: env.APP_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    for (let d = eligibleStartDay; d <= lastDay; d += 1) {
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (date > today || classifyDay(d) !== 'WORKING') continue;
+      if (!attendanceByDate.has(date) && !approvedLeaveDates.has(date)) {
+        lopDays += 1;
+      }
     }
 
     if (lopDays > eligibleWorkingDays) lopDays = eligibleWorkingDays;
