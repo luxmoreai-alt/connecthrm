@@ -94,6 +94,17 @@ export interface TodayAttendanceResponse {
   dayType: "WORKING" | "HOLIDAY" | "WEEK_OFF" | "LEAVE" | string;
   workStartTime: string;
   workEndTime: string;
+  scheduleSource?: "ALLOCATED_SHIFT" | "ORG_DEFAULT";
+  assignedShift?: {
+    id: string;
+    code: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+    color: string;
+    isNightShift: boolean;
+    note: string;
+  } | null;
   lateGraceMinutes: number;
   checkInWindowMinutes: number;
   canStartWork: boolean;

@@ -9,6 +9,8 @@ export { payrollApi } from "./payroll.api";
 export { dashboardApi } from "./dashboard.api";
 export { profileApi, sharedDashboardApi } from "./profile.api";
 export { notificationApi } from "./notification.api";
+export { shiftApi } from "./shift.api";
+export type { ShiftDefinition, ShiftAssignmentDay, EmployeeShiftWeek, AdminShiftWeek, AdminShiftEmployee, SaveShiftDay } from "./shift.api";
 export type { NotificationItem } from "./notification.api";
 export type { DashboardSummary } from "./dashboard.api";
 export type { ProfileData, UpcomingBirthday, UpcomingHoliday } from "./profile.api";

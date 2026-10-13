@@ -26,7 +26,7 @@ import {
   useDisclosure,
   useToast,
 } from "@chakra-ui/react";
-import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, FilePenLine, LogIn, LogOut, MapPin, RefreshCw, Sparkles, Timer } from "lucide-react";
+import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, FilePenLine, LogIn, LogOut, MapPin, RefreshCw, Sparkles, Timer } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import PunchCameraModal from "@/components/attendance/PunchCameraModal";
@@ -237,6 +237,14 @@ function formatMinutes(total: number): string {
 function formatAccessMode(mode?: AttendanceAccessMode): string {
   if (!mode) return "-";
   return mode.replace(/_/g, " ");
+}
+
+function formatScheduleTime(value?: string): string {
+  if (!value) return "-";
+  const [hours, minutes] = value.split(":").map(Number);
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const hour = hours % 12 || 12;
+  return `${hour}:${String(minutes || 0).padStart(2, "0")} ${suffix}`;
 }
 
 function getLeaveCode(record: AttendanceRecord): string {
@@ -944,9 +952,19 @@ export default function EmployeeAttendancePage() {
               </Flex>
 
               <SimpleGrid columns={2} spacing={2}>
+                <Stat label="Scheduled Login" value={formatScheduleTime(todayState?.workStartTime)} />
+                <Stat label="Scheduled Logout" value={formatScheduleTime(todayState?.workEndTime)} />
                 <Stat label="First In" value={formatTime(todayState?.attendance?.firstCheckInAt ?? null)} />
                 <Stat label="Last Out" value={formatTime(todayState?.attendance?.lastCheckOutAt ?? null)} />
               </SimpleGrid>
+
+              <Flex align="center" gap={2} bg="brand.50" color="brand.700" borderRadius="lg" px={3} py={2}>
+                <Clock3 size={15} />
+                <Text fontSize="sm" fontWeight="700">
+                  {todayState?.assignedShift?.name || "Organization default shift"}
+                  {todayState?.assignedShift?.isNightShift ? " · Night shift" : ""}
+                </Text>
+              </Flex>
 
               <HStack spacing={2} fontSize="xs" color="text.muted" flexWrap="wrap">
                 <HStack spacing={1}><MapPin size={13} /><Text>{formatAccessMode(todayState?.accessPolicy?.attendanceMode)}</Text></HStack>

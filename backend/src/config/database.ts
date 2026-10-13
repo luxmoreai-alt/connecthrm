@@ -31,6 +31,8 @@ import { EmployeeStatutoryBreakdown } from '../entities/EmployeeStatutoryBreakdo
 import { Notification } from '../entities/Notification.entity';
 import { PushSubscription } from '../entities/PushSubscription.entity';
 import { HrPortalAccess } from '../entities/HrPortalAccess.entity';
+import { ShiftDefinition } from '../entities/ShiftDefinition.entity';
+import { ShiftAssignment } from '../entities/ShiftAssignment.entity';
 
 const isProduction = env.NODE_ENV === 'production';
 
@@ -72,6 +74,8 @@ export const AppDataSource = new DataSource({
     Notification,
     PushSubscription,
     HrPortalAccess,
+    ShiftDefinition,
+    ShiftAssignment,
   ],
   migrations: isProduction ? ['dist/migrations/*.js'] : ['src/migrations/*.ts'],
   subscribers: [],

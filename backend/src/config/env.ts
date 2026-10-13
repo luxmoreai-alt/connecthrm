@@ -107,6 +107,8 @@ const envSchema = z.object({
   // Outlook-clone employee access provisioning (optional).
   OUTLOOK_PROVISIONING_URL: optionalString,
   OUTLOOK_PROVISIONING_TOKEN: optionalString,
+  // Shared server-to-server token used by the centralized administrator agent.
+  CENTRAL_AGENT_TOKEN: optionalString,
 });
 
 const parsed = envSchema.safeParse(process.env);

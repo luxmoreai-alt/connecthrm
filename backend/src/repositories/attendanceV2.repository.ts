@@ -153,11 +153,24 @@ export class AttendanceV2Repository {
     employeeId: string,
     start: Date,
     end: Date,
+    punchDate?: string,
   ): Promise<AttendancePunch[]> {
-    return this.punchRepo.find({
-      where: { employeeId, time: Between(start, end) },
-      order: { time: 'ASC' },
-    });
+    if (!punchDate) {
+      return this.punchRepo.find({
+        where: { employeeId, time: Between(start, end) },
+        order: { time: 'ASC' },
+      });
+    }
+
+    return this.punchRepo
+      .createQueryBuilder('punch')
+      .where('punch."employeeId" = :employeeId', { employeeId })
+      .andWhere(
+        '(punch."punchDate" = :punchDate OR (punch."punchDate" IS NULL AND punch.time BETWEEN :start AND :end))',
+        { punchDate, start, end },
+      )
+      .orderBy('punch.time', 'ASC')
+      .getMany();
   }
 
   async findLatestPunchForDate(

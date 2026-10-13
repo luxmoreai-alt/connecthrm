@@ -39,6 +39,17 @@ export default function LoginPage() {
   const { login, isAuthenticated, user, authStatus } = useAuth();
   const router = useRouter();
 
+  // Never retain accidentally submitted credentials in the address bar or
+  // browser history. Keep only navigation-related query parameters.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("email") || url.searchParams.has("password")) {
+      url.searchParams.delete("email");
+      url.searchParams.delete("password");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
+
   const destinationFor = (role: "admin" | "hr" | "employee") => {
     const fallback = role === "admin" || role === "hr" ? "/admin/dashboard" : "/employee/dashboard";
     if (typeof window === "undefined") return fallback;
@@ -235,7 +246,7 @@ export default function LoginPage() {
           </Text>
 
           {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)}>
+          <form method="post" onSubmit={handleSubmit(onSubmit)}>
             <VStack spacing={4} align="stretch">
               <FormControl isInvalid={!!errors.email}>
                 <FormLabel fontSize="sm" color="text.heading" fontWeight="600">

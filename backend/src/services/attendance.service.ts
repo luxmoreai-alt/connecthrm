@@ -22,6 +22,8 @@ import {
 } from '../attendance/attendance.enums';
 import { buildDefaultAttendancePolicy } from '../attendance/defaultAttendancePolicy';
 import { env } from '../config/env';
+import { AppDataSource } from '../config/database';
+import { ShiftAssignment } from '../entities/ShiftAssignment.entity';
 
 interface GeoInput {
   latitude?: number;
@@ -125,6 +127,7 @@ export class AttendanceService {
   private repo: AttendanceV2Repository;
   private settingsRepo: SettingsRepository;
   private leaveRepo: LeaveRepository;
+  private shiftAssignmentRepo = AppDataSource.getRepository(ShiftAssignment);
 
   constructor() {
     this.repo = new AttendanceV2Repository();
@@ -178,7 +181,7 @@ export class AttendanceService {
   async getTodayState(employeeId: string) {
     const policy = await this.ensureActivePolicy();
     const now = new Date();
-    const date = this.toDateKey(now);
+    const date = await this.resolveAttendanceDate(employeeId, now);
     const state = await this.buildDayState(employeeId, date, policy, false);
     const accessPolicy = await this.resolveAccessPolicy(employeeId, date, policy);
     const canPunchIn = state.nextPunchType === PunchType.CHECK_IN;
@@ -198,6 +201,8 @@ export class AttendanceService {
     } else if (state.dayType === ('PRE_JOINING' as AttendanceDayType)) {
       reasonCode = 'PRE_JOINING';
       reasonMessage = 'Attendance will start from your date of joining';
+    } else if (state.shiftAssignment?.shift) {
+      reasonMessage = `${state.shiftAssignment.shift.name}: scheduled login ${state.workStartTime.slice(0, 5)}`;
     }
 
     const canPunchToday = state.dayType === AttendanceDayType.WORKING;
@@ -205,8 +210,21 @@ export class AttendanceService {
     return {
       date,
       dayType: state.dayType,
-      workStartTime: policy.workStartTime,
-      workEndTime: policy.workEndTime,
+      workStartTime: state.workStartTime,
+      workEndTime: state.workEndTime,
+      scheduleSource: state.shiftAssignment ? 'ALLOCATED_SHIFT' : 'ORG_DEFAULT',
+      assignedShift: state.shiftAssignment
+        ? {
+            id: state.shiftAssignment.shift.id,
+            code: state.shiftAssignment.shift.code,
+            name: state.shiftAssignment.shift.name,
+            startTime: state.shiftAssignment.shift.startTime,
+            endTime: state.shiftAssignment.shift.endTime,
+            color: state.shiftAssignment.shift.color,
+            isNightShift: state.shiftAssignment.shift.isNightShift,
+            note: state.shiftAssignment.note,
+          }
+        : null,
       lateGraceMinutes: policy.lateGraceMinutes,
       checkInWindowMinutes: policy.minimumPunchGapMinutes,
       canStartWork: canPunchToday && canPunchIn,
@@ -253,7 +271,7 @@ export class AttendanceService {
       );
     }
 
-    const date = this.toDateKey(punchedAt);
+    const date = await this.resolveAttendanceDate(employeeId, punchedAt);
     const stateBefore = await this.buildDayState(employeeId, date, policy, false);
     const accessPolicy = await this.resolveAccessPolicy(employeeId, date, policy);
 
@@ -1554,16 +1572,28 @@ export class AttendanceService {
       forceRecomputeManualOverride?: boolean;
     },
   ) {
-    const [existing, leave, holiday, approvedPermission, approvedRegularization, punches, profile] =
+    const [existing, leave, holiday, approvedPermission, approvedRegularization, punches, profile, shiftAssignment] =
       await Promise.all([
       this.repo.findDayRecord(employeeId, date),
       this.repo.findApprovedLeaveForEmployeeDate(employeeId, date),
       this.repo.findHolidayByDate(date),
       this.repo.findApprovedPermissionForDate(employeeId, date),
       this.repo.findApprovedRegularizationForDate(employeeId, date),
-      this.repo.findPunchesByEmployeeAndDate(employeeId, this.startOfDay(date), this.endOfDay(date)),
+      this.repo.findPunchesByEmployeeAndDate(employeeId, this.startOfDay(date), this.endOfDay(date), date),
       this.repo.findEmployeeProfileByUserId(employeeId),
+      this.shiftAssignmentRepo.findOne({
+        where: { employeeId, shiftDate: date },
+        relations: { shift: true },
+      }),
     ]);
+
+    const dayPolicy = shiftAssignment?.shift
+      ? ({
+          ...policy,
+          workStartTime: shiftAssignment.shift.startTime,
+          workEndTime: shiftAssignment.shift.endTime,
+        } as AttendancePolicy)
+      : policy;
 
     if (existing?.isManualOverride && !options?.forceRecomputeManualOverride) {
       const sessions = await this.repo.findSessionsByAttendanceId(existing.id);
@@ -1581,24 +1611,33 @@ export class AttendanceService {
         punches,
         dayType: existing.dayType,
         nextPunchType: this.getExpectedNextPunchType(punches),
+        workStartTime: dayPolicy.workStartTime,
+        workEndTime: dayPolicy.workEndTime,
+        shiftAssignment,
       };
     }
 
-    const dayType =
+    let dayType =
       profile?.dateOfJoining && date < profile.dateOfJoining
         ? ('PRE_JOINING' as AttendanceDayType)
-        : this.resolveDayType(date, policy, {
+        : this.resolveDayType(date, dayPolicy, {
             holidayApplied: Boolean(holiday),
             leaveApplied: Boolean(leave),
           });
 
-    const sessions = this.buildSessions(date, punches, policy);
+    // A deliberate shift assignment turns an otherwise weekly-off day into a
+    // working day. Holiday and approved-leave precedence remain unchanged.
+    if (shiftAssignment && dayType === AttendanceDayType.WEEK_OFF) {
+      dayType = AttendanceDayType.WORKING;
+    }
+
+    const sessions = this.buildSessions(date, punches, dayPolicy);
     const patchedSessions = this.applyRegularizationToSessions(sessions, approvedRegularization, date);
 
     const stats = this.calculateDayStats(
       date,
       patchedSessions,
-      policy,
+      dayPolicy,
       approvedPermission,
       approvedRegularization,
     );
@@ -1608,7 +1647,7 @@ export class AttendanceService {
       date,
       dayType,
       stats,
-      policy,
+      policy: dayPolicy,
       hasPunches: punches.length > 0,
       hasRegularization: Boolean(approvedRegularization),
       hasPermission: stats.permissionMinutesApplied > 0,
@@ -1647,6 +1686,10 @@ export class AttendanceService {
         weeklyOffApplied: dayType === AttendanceDayType.WEEK_OFF,
         permissionApplied: stats.permissionMinutesApplied,
         regularizationApplied: Boolean(approvedRegularization),
+        shiftAssignmentId: shiftAssignment?.id ?? null,
+        shiftCode: shiftAssignment?.shift?.code ?? null,
+        scheduledStartTime: dayPolicy.workStartTime,
+        scheduledEndTime: dayPolicy.workEndTime,
       },
       isAutoClosed: patchedSessions.some((session) => session.isAutoClosed),
       locationValidated:
@@ -1706,6 +1749,9 @@ export class AttendanceService {
       punches,
       dayType,
       nextPunchType: this.getExpectedNextPunchType(punches),
+      workStartTime: dayPolicy.workStartTime,
+      workEndTime: dayPolicy.workEndTime,
+      shiftAssignment,
     };
   }
 
@@ -1941,7 +1987,7 @@ export class AttendanceService {
     });
 
     const shiftStart = this.combineDateTime(date, policy.workStartTime);
-    const shiftEnd = this.combineDateTime(date, policy.workEndTime);
+    const shiftEnd = this.scheduledShiftEnd(date, policy.workStartTime, policy.workEndTime);
 
     const lateByMinutes = firstPunchIn
       ? Math.max(0, this.minutesBetween(this.addMinutes(shiftStart, policy.lateGraceMinutes), firstPunchIn))
@@ -2275,14 +2321,12 @@ export class AttendanceService {
     const day = new Date(`${date}T00:00:00`);
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     if (day.getTime() < today.getTime()) return true;
-    const shiftEnd = this.combineDateTime(date, policy.workEndTime);
+    const shiftEnd = this.scheduledShiftEnd(date, policy.workStartTime, policy.workEndTime);
     return now.getTime() > shiftEnd.getTime();
   }
 
   private resolveAutoCloseTime(date: string, policy: AttendancePolicy) {
-    const shiftEnd = this.combineDateTime(date, policy.workEndTime);
-    const endOfDay = this.endOfDay(date);
-    return shiftEnd.getTime() <= endOfDay.getTime() ? shiftEnd : endOfDay;
+    return this.scheduledShiftEnd(date, policy.workStartTime, policy.workEndTime);
   }
 
   private isWeeklyOff(date: Date, policy: AttendancePolicy): boolean {
@@ -2613,6 +2657,41 @@ export class AttendanceService {
   private toDateKey(date: Date) {
     const parts = this.getTimeZoneParts(date);
     return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+  }
+
+  private async resolveAttendanceDate(employeeId: string, instant: Date): Promise<string> {
+    const currentDate = this.toDateKey(instant);
+    const currentStart = this.startOfDay(currentDate);
+    const previousInstant = new Date(currentStart.getTime() - 60 * 60 * 1000);
+    const previousDate = this.toDateKey(previousInstant);
+    const previousShift = await this.shiftAssignmentRepo.findOne({
+      where: { employeeId, shiftDate: previousDate },
+      relations: { shift: true },
+    });
+
+    if (previousShift?.shift?.isNightShift) {
+      const shiftStart = this.combineDateTime(previousDate, previousShift.shift.startTime);
+      const shiftEnd = this.scheduledShiftEnd(
+        previousDate,
+        previousShift.shift.startTime,
+        previousShift.shift.endTime,
+      );
+      const checkoutGraceEnd = new Date(shiftEnd.getTime() + 6 * 60 * 60 * 1000);
+      if (instant.getTime() >= shiftStart.getTime() && instant.getTime() <= checkoutGraceEnd.getTime()) {
+        return previousDate;
+      }
+    }
+
+    return currentDate;
+  }
+
+  private scheduledShiftEnd(date: string, startTime: string, endTime: string): Date {
+    const start = this.combineDateTime(date, startTime);
+    const end = this.combineDateTime(date, endTime);
+    if (end.getTime() <= start.getTime()) {
+      end.setTime(end.getTime() + 24 * 60 * 60 * 1000);
+    }
+    return end;
   }
 
   private startOfDay(date: string) {
