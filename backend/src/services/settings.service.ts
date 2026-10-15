@@ -1,5 +1,7 @@
 import { SettingsRepository } from '../repositories/settings.repository';
 import { ApiError } from '../utils/apiError';
+import { WorkdayOverrideType } from '../entities/WorkdayOverride.entity';
+import { NotificationService } from './notification.service';
 
 interface UpdateSettingsInput {
   companyName?: string;
@@ -27,8 +29,15 @@ interface HolidayInput {
   name: string;
 }
 
+interface WorkdayOverrideInput {
+  date: string;
+  type: 'WORKING_DAY' | 'NON_WORKING_DAY';
+  reason: string;
+}
+
 export class SettingsService {
   private repo: SettingsRepository;
+  private notifications = new NotificationService();
 
   constructor() {
     this.repo = new SettingsRepository();
@@ -156,6 +165,43 @@ export class SettingsService {
     await this.repo.deleteHoliday(id);
   }
 
+  async listWorkdayOverrides(year?: number) {
+    const rows = await this.repo.findAllWorkdayOverrides();
+    return rows
+      .filter((row) => !year || row.date.startsWith(`${year}-`))
+      .map((row) => this.formatWorkdayOverride(row));
+  }
+
+  async saveWorkdayOverride(input: WorkdayOverrideInput, updatedBy: string) {
+    const existing = await this.repo.findWorkdayOverrideByDate(input.date);
+    const saved = await this.repo.saveWorkdayOverride({
+      ...(existing ?? {}),
+      date: input.date,
+      type: input.type as WorkdayOverrideType,
+      reason: input.reason.trim(),
+      updatedBy,
+    });
+    const readableDate = new Date(`${input.date}T00:00:00`).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric', weekday: 'long',
+    });
+    const title = input.type === WorkdayOverrideType.WORKING_DAY
+      ? `${readableDate} is a working day`
+      : `${readableDate} is a non-working day`;
+    await this.notifications.notifyAll(
+      'WORKDAY_UPDATE',
+      title,
+      input.reason.trim(),
+      '/employee/holidays',
+    );
+    return this.formatWorkdayOverride(saved);
+  }
+
+  async deleteWorkdayOverride(id: string) {
+    const existing = await this.repo.findWorkdayOverrideById(id);
+    if (!existing) throw ApiError.notFound('Workday update not found', 'WORKDAY_OVERRIDE_NOT_FOUND');
+    await this.repo.deleteWorkdayOverride(id);
+  }
+
   private formatSettings(s: any) {
     return {
       id: s.id,
@@ -188,6 +234,17 @@ export class SettingsService {
       name: h.name,
       createdAt: h.createdAt,
       updatedAt: h.updatedAt,
+    };
+  }
+
+  private formatWorkdayOverride(row: any) {
+    return {
+      id: row.id,
+      date: row.date,
+      type: row.type,
+      reason: row.reason,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
   }
 }

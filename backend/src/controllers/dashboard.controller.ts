@@ -30,4 +30,11 @@ export class DashboardController {
     const result = await dashboardService.getHolidayCalendar(year);
     ApiResponse.success(res, 'Holiday calendar retrieved', result);
   }
+
+  static async getWorkdayUpdates(req: Request, res: Response): Promise<void> {
+    const requestedYear = Number(req.query.year ?? new Date().getFullYear());
+    const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
+      ? requestedYear : new Date().getFullYear();
+    ApiResponse.success(res, 'Workday updates retrieved', await dashboardService.getWorkdayUpdates(year));
+  }
 }

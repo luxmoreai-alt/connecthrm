@@ -14,6 +14,7 @@ import { LeavePolicySlab } from '../entities/LeavePolicySlab.entity';
 import { AttendanceService } from './attendance.service';
 import { AlternateSaturdayRule } from '../entities/OrgSettings.entity';
 import { NotificationService } from './notification.service';
+import { WorkdayOverrideType } from '../entities/WorkdayOverride.entity';
 
 // ── Input types ──
 
@@ -562,10 +563,19 @@ export class LeaveService {
 
     const settings = await this.settingsRepo.getSettings();
     const datesToValidate = this.listDatesInRange(checkStartDate, checkEndDate);
-    const holidayRows = await Promise.all(
-      datesToValidate.map((date) => this.settingsRepo.findHolidayByDate(date)),
-    );
-    const holidayHit = holidayRows.find((row) => Boolean(row));
+    const [holidayRows, overrideRows] = await Promise.all([
+      Promise.all(datesToValidate.map((date) => this.settingsRepo.findHolidayByDate(date))),
+      Promise.all(datesToValidate.map((date) => this.settingsRepo.findWorkdayOverrideByDate(date))),
+    ]);
+    const overrideMap = new Map(overrideRows.filter(Boolean).map((row) => [row!.date, row!]));
+    const nonWorkingOverride = overrideRows.find((row) => row?.type === WorkdayOverrideType.NON_WORKING_DAY);
+    if (nonWorkingOverride) {
+      throw ApiError.badRequest(
+        `Leave cannot be applied on ${nonWorkingOverride.date}: ${nonWorkingOverride.reason}`,
+        'LEAVE_NON_WORKING_DAY_NOT_ALLOWED',
+      );
+    }
+    const holidayHit = holidayRows.find((row) => row && overrideMap.get(row.date)?.type !== WorkdayOverrideType.WORKING_DAY);
     if (holidayHit) {
       throw ApiError.badRequest(
         `Leave cannot be applied on holiday (${holidayHit.name} - ${holidayHit.date})`,
@@ -575,6 +585,7 @@ export class LeaveService {
     if (
       settings &&
       datesToValidate.some((date) =>
+        overrideMap.get(date)?.type !== WorkdayOverrideType.WORKING_DAY &&
         this.isWeeklyOffDate(date, settings.weekOffDays, settings.alternateSaturdayOffRule),
       )
     ) {

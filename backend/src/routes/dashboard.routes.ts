@@ -10,6 +10,7 @@ const router = Router();
 router.get('/upcoming-birthdays', authMiddleware, asyncHandler(DashboardController.getUpcomingBirthdays));
 router.get('/upcoming-holidays', authMiddleware, asyncHandler(DashboardController.getUpcomingHolidays));
 router.get('/holidays', authMiddleware, asyncHandler(DashboardController.getHolidayCalendar));
+router.get('/workday-updates', authMiddleware, asyncHandler(DashboardController.getWorkdayUpdates));
 
 // Admin-only summary
 router.get('/', authMiddleware, roleMiddleware('ADMIN'), asyncHandler(DashboardController.getSummary));

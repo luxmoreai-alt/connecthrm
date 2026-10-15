@@ -20,4 +20,7 @@ export const notificationApi = {
   list: (limit = 20) => api.get<{ items: NotificationItem[]; unreadCount: number }>(`/notifications?limit=${limit}`),
   markRead: (id: string) => api.patch<NotificationItem>(`/notifications/${id}/read`),
   markAllRead: () => api.patch('/notifications/read-all'),
+  listAnnouncements: (limit = 100) => api.get<NotificationItem[]>(`/notifications/announcements?limit=${limit}`),
+  publishAnnouncement: (data: { title: string; message: string }) =>
+    api.post<{ deliveredTo: number }>('/notifications/announcements', data),
 };

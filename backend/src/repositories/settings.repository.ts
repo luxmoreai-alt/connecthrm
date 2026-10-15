@@ -2,14 +2,17 @@ import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { OrgSettings } from '../entities/OrgSettings.entity';
 import { Holiday } from '../entities/Holiday.entity';
+import { WorkdayOverride } from '../entities/WorkdayOverride.entity';
 
 export class SettingsRepository {
   private settingsRepo: Repository<OrgSettings>;
   private holidayRepo: Repository<Holiday>;
+  private workdayOverrideRepo: Repository<WorkdayOverride>;
 
   constructor() {
     this.settingsRepo = AppDataSource.getRepository(OrgSettings);
     this.holidayRepo = AppDataSource.getRepository(Holiday);
+    this.workdayOverrideRepo = AppDataSource.getRepository(WorkdayOverride);
   }
 
   // ── Org Settings ──
@@ -53,5 +56,25 @@ export class SettingsRepository {
 
   async deleteHoliday(id: string): Promise<void> {
     await this.holidayRepo.delete(id);
+  }
+
+  async findAllWorkdayOverrides(): Promise<WorkdayOverride[]> {
+    return this.workdayOverrideRepo.find({ order: { date: 'ASC' } });
+  }
+
+  async findWorkdayOverrideById(id: string): Promise<WorkdayOverride | null> {
+    return this.workdayOverrideRepo.findOne({ where: { id } });
+  }
+
+  async findWorkdayOverrideByDate(date: string): Promise<WorkdayOverride | null> {
+    return this.workdayOverrideRepo.findOne({ where: { date } });
+  }
+
+  async saveWorkdayOverride(data: Partial<WorkdayOverride>): Promise<WorkdayOverride> {
+    return this.workdayOverrideRepo.save(this.workdayOverrideRepo.create(data));
+  }
+
+  async deleteWorkdayOverride(id: string): Promise<void> {
+    await this.workdayOverrideRepo.delete(id);
   }
 }

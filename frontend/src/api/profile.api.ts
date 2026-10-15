@@ -64,6 +64,14 @@ export interface HolidayCalendarEntry {
   dayName: string;
 }
 
+export interface WorkdayUpdate {
+  id: string;
+  date: string;
+  type: "WORKING_DAY" | "NON_WORKING_DAY";
+  reason: string;
+  updatedAt: string;
+}
+
 export const profileApi = {
   getMe: () => api.get<ProfileData>("/profile/me"),
 
@@ -89,4 +97,7 @@ export const sharedDashboardApi = {
 
   getHolidayCalendar: (year = new Date().getFullYear()) =>
     api.get<HolidayCalendarEntry[]>(`/dashboard/holidays?year=${year}`),
+
+  getWorkdayUpdates: (year = new Date().getFullYear()) =>
+    api.get<WorkdayUpdate[]>(`/dashboard/workday-updates?year=${year}`),
 };

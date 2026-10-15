@@ -134,6 +134,24 @@ export const ensureBackendReady = async (): Promise<void> => {
       await AppDataSource.query(
         `CREATE INDEX IF NOT EXISTS "IDX_shift_assignments_employee" ON "shift_assignments" ("employeeId", "shiftDate")`,
       );
+      await AppDataSource.query(`DO $$ BEGIN
+        CREATE TYPE "public"."workday_overrides_type_enum" AS ENUM('WORKING_DAY', 'NON_WORKING_DAY');
+      EXCEPTION WHEN duplicate_object THEN null; END $$;`);
+      await AppDataSource.query(`CREATE TABLE IF NOT EXISTS "workday_overrides" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "date" date NOT NULL,
+        "type" "public"."workday_overrides_type_enum" NOT NULL,
+        "reason" character varying(500) NOT NULL,
+        "updatedBy" uuid NOT NULL,
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now(),
+        CONSTRAINT "UQ_workday_overrides_date" UNIQUE ("date"),
+        CONSTRAINT "PK_workday_overrides_id" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_workday_overrides_updater" FOREIGN KEY ("updatedBy") REFERENCES "users"("id") ON DELETE RESTRICT
+      )`);
+      await AppDataSource.query(
+        `CREATE INDEX IF NOT EXISTS "IDX_workday_overrides_date" ON "workday_overrides" ("date")`,
+      );
       await AppDataSource.query(`
         INSERT INTO "shift_definitions" ("code", "name", "startTime", "endTime", "color", "isNightShift") VALUES
           ('GENERAL', 'General Shift', '09:30', '18:30', '#0B72E7', false),

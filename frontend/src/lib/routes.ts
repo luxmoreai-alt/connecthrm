@@ -15,6 +15,7 @@ import {
   ClipboardPenLine,
   ShieldCheck,
   Clock3,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ export const adminRoutes: RouteItem[] = [
   { label: "Leave", href: "/admin/leave", icon: CalendarOff },
   { label: "Payroll", href: "/admin/payroll", icon: Wallet },
   { label: "Reports", href: "/admin/reports", icon: FileSpreadsheet },
+  { label: "Announcements", href: "/admin/announcements", icon: Megaphone },
   { label: "Settings", href: "/admin/settings", icon: Settings },
   { label: "Administration", href: "/admin/administration", icon: ShieldCheck, mainAdminOnly: true },
 ];
@@ -57,6 +59,7 @@ export const employeeRoutes: RouteItem[] = [
   { label: "Attendance", href: "/employee/attendance", icon: CalendarCheck },
   { label: "My Shifts", href: "/employee/shifts", icon: Clock3 },
   { label: "Holiday Calendar", href: "/employee/holidays", icon: CalendarDays },
+  { label: "Announcements", href: "/employee/announcements", icon: Megaphone },
   { label: "Leave", href: "/employee/leave", icon: CalendarOff },
   { label: "Payroll", href: "/employee/payroll", icon: Wallet },
   { label: "Profile", href: "/employee/profile", icon: UserCircle },

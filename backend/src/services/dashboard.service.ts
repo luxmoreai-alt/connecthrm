@@ -443,4 +443,17 @@ export class DashboardService {
         };
       });
   }
+
+  async getWorkdayUpdates(year = new Date().getFullYear()) {
+    const rows = await settingsRepo.findAllWorkdayOverrides();
+    return rows
+      .filter((row) => row.date.startsWith(`${year}-`))
+      .map((row) => ({
+        id: row.id,
+        date: row.date,
+        type: row.type,
+        reason: row.reason,
+        updatedAt: row.updatedAt,
+      }));
+  }
 }

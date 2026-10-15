@@ -4,6 +4,7 @@ import {
   updateSettingsSchema,
   createHolidaySchema,
   updateHolidaySchema,
+  saveWorkdayOverrideSchema,
 } from '../validators/settings.validator';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';
@@ -84,5 +85,25 @@ export class SettingsController {
     const id = req.params.id as string;
     await settingsService.deleteHoliday(id);
     ApiResponse.success(res, 'Holiday deleted successfully');
+  }
+
+  static async listWorkdayOverrides(req: Request, res: Response): Promise<void> {
+    const year = req.query.year ? Number(req.query.year) : undefined;
+    const result = await settingsService.listWorkdayOverrides(year);
+    ApiResponse.success(res, 'Workday updates retrieved', result);
+  }
+
+  static async saveWorkdayOverride(req: Request, res: Response): Promise<void> {
+    const parsed = saveWorkdayOverrideSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw ApiError.badRequest(parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '), 'VALIDATION_ERROR');
+    }
+    const result = await settingsService.saveWorkdayOverride(parsed.data, req.user!.userId);
+    ApiResponse.success(res, 'Workday update saved and employees notified', result);
+  }
+
+  static async deleteWorkdayOverride(req: Request, res: Response): Promise<void> {
+    await settingsService.deleteWorkdayOverride(req.params.id as string);
+    ApiResponse.success(res, 'Workday update deleted');
   }
 }

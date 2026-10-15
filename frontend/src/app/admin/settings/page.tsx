@@ -9,6 +9,7 @@ import {
   useToast,
   IconButton,
   HStack,
+  VStack,
   Spinner,
   Modal,
   ModalOverlay,
@@ -22,11 +23,14 @@ import {
   Alert,
   AlertIcon,
   AlertDescription,
+  Textarea,
+  Badge,
 } from "@chakra-ui/react";
 import { Plus, Edit2, Trash2, CalendarDays, Clock, MapPin, CalendarOff, Shield, Upload, X, FileDown } from "lucide-react";
 import { payrollApi, settingsApi } from "@/api";
 import { leaveApi, type LeaveSlabData } from "@/api/leave.api";
 import type { Holiday } from "@/api";
+import type { WorkdayOverride } from "@/api/settings.api";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/Buttons";
@@ -112,6 +116,12 @@ export default function SettingsPage() {
     weekOffDays: "SUNDAY",
     alternateSaturdayOffRule: "NONE" as "NONE" | "SECOND_FOURTH" | "FIRST_THIRD",
   });
+  const [workdayOverrides, setWorkdayOverrides] = useState<WorkdayOverride[]>([]);
+  const [workdayForm, setWorkdayForm] = useState({
+    date: "",
+    type: "WORKING_DAY" as WorkdayOverride["type"],
+    reason: "",
+  });
 
   // ── Location form ──
   const [locationForm, setLocationForm] = useState({
@@ -152,10 +162,11 @@ export default function SettingsPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [s, h, lp] = await Promise.all([
+      const [s, h, lp, overrides] = await Promise.all([
         settingsApi.get(),
         settingsApi.listHolidays(),
         leaveApi.getPolicy().catch(() => null),
+        settingsApi.listWorkdayOverrides(),
       ]);
       setTimingsForm({
         workStartTime: s.workStartTime?.slice(0, 5) || "09:00",
@@ -184,6 +195,7 @@ export default function SettingsPage() {
         allowRemoteAttendance: s.allowRemoteAttendance ?? false,
       });
       setHolidays(h.data);
+      setWorkdayOverrides(overrides);
       if (lp) {
         const pol = lp.policy;
         if (pol) {
@@ -234,6 +246,34 @@ export default function SettingsPage() {
 
   const handleSaveWeekOff = () =>
     saveSection("weekoff", weekOffForm);
+
+  const handleSaveWorkdayOverride = async () => {
+    if (!workdayForm.date || workdayForm.reason.trim().length < 3) {
+      toast({ title: "Date and reason are required", status: "warning", duration: 2500, isClosable: true, position: "top-right" });
+      return;
+    }
+    try {
+      setSaving("workday-override");
+      await settingsApi.saveWorkdayOverride(workdayForm);
+      setWorkdayOverrides(await settingsApi.listWorkdayOverrides());
+      setWorkdayForm({ date: "", type: "WORKING_DAY", reason: "" });
+      toast({ title: "Workday updated", description: "All active users were notified with the reason.", status: "success", duration: 3000, isClosable: true, position: "top-right" });
+    } catch (err: any) {
+      toast({ title: err?.message || "Failed to save workday update", status: "error", duration: 3000, isClosable: true, position: "top-right" });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleDeleteWorkdayOverride = async (id: string) => {
+    try {
+      await settingsApi.deleteWorkdayOverride(id);
+      setWorkdayOverrides((rows) => rows.filter((row) => row.id !== id));
+      toast({ title: "Workday update removed", status: "success", duration: 2000, isClosable: true, position: "top-right" });
+    } catch (err: any) {
+      toast({ title: err?.message || "Failed to remove update", status: "error", duration: 3000, isClosable: true, position: "top-right" });
+    }
+  };
 
   const handleSaveLocation = () => {
     const data: Record<string, unknown> = {
@@ -730,6 +770,53 @@ export default function SettingsPage() {
         </SectionCard>
 
         {/* ── Office Location & Attendance Access ── */}
+        <SectionCard
+          title="Single-date Workday Update"
+          actions={<Badge colorScheme="purple">One date only</Badge>}
+        >
+          <Flex direction="column" gap={4}>
+            <Alert status="info" borderRadius="lg" alignItems="flex-start">
+              <AlertIcon mt={0.5} />
+              <AlertDescription fontSize="sm">
+                Change one weekly off/holiday into a working day, or one normal day into a non-working day. Employees receive the reason as an office notification.
+              </AlertDescription>
+            </Alert>
+            <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={3}>
+              <Field label="Date" required>
+                <StyledInput type="date" value={workdayForm.date} onChange={(e) => setWorkdayForm((form) => ({ ...form, date: e.target.value }))} />
+              </Field>
+              <Field label="Day status" required>
+                <StyledSelect value={workdayForm.type} onChange={(e) => setWorkdayForm((form) => ({ ...form, type: e.target.value as WorkdayOverride["type"] }))}>
+                  <option value="WORKING_DAY">Working Day</option>
+                  <option value="NON_WORKING_DAY">Non-working Day</option>
+                </StyledSelect>
+              </Field>
+            </SimpleGrid>
+            <Field label="Reason shown to employees" required>
+              <Textarea value={workdayForm.reason} onChange={(e) => setWorkdayForm((form) => ({ ...form, reason: e.target.value }))} maxLength={500} placeholder="Example: Sunday is a working day due to the client release." borderRadius="xl" />
+            </Field>
+            <PrimaryButton size="sm" alignSelf="flex-start" onClick={handleSaveWorkdayOverride} isLoading={saving === "workday-override"}>
+              Save &amp; Notify Everyone
+            </PrimaryButton>
+            {workdayOverrides.length > 0 && (
+              <VStack align="stretch" spacing={2} pt={2} borderTop="1px solid" borderColor="surface.border">
+                {workdayOverrides.slice().reverse().slice(0, 8).map((row) => (
+                  <Flex key={row.id} align="center" gap={3} p={3} bg="surface.bg" borderRadius="xl">
+                    <Box flex={1} minW={0}>
+                      <Flex gap={2} align="center" flexWrap="wrap">
+                        <Text fontWeight="700" fontSize="sm">{new Date(`${row.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</Text>
+                        <Badge colorScheme={row.type === "WORKING_DAY" ? "green" : "orange"}>{row.type === "WORKING_DAY" ? "Working" : "Non-working"}</Badge>
+                      </Flex>
+                      <Text fontSize="xs" color="text.muted" mt={1}>{row.reason}</Text>
+                    </Box>
+                    <IconButton aria-label="Delete workday update" icon={<Trash2 size={15} />} size="sm" variant="ghost" colorScheme="red" onClick={() => handleDeleteWorkdayOverride(row.id)} />
+                  </Flex>
+                ))}
+              </VStack>
+            )}
+          </Flex>
+        </SectionCard>
+
         <SectionCard
           title="Office Location & Attendance Access"
           actions={

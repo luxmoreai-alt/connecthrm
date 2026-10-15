@@ -59,6 +59,38 @@ export class NotificationService {
     return notifications;
   }
 
+  async notifyAll(type: string, title: string, message: string, actionUrl?: string) {
+    const users = await AppDataSource.getRepository(User).find({
+      where: { isActive: true },
+      select: ['id', 'role'],
+    });
+    if (!users.length) return [];
+    const notifications = await this.repo.save(users.map((user) => {
+      let recipientActionUrl = actionUrl || null;
+      if (user.role === UserRole.ADMIN && actionUrl === '/employee/announcements') recipientActionUrl = '/admin/announcements';
+      if (user.role === UserRole.ADMIN && actionUrl === '/employee/holidays') recipientActionUrl = '/admin/settings';
+      return this.repo.create({ recipientId: user.id, type, title, message, actionUrl: recipientActionUrl });
+    }));
+    await Promise.all(notifications.map((notification) =>
+      this.pushService.sendToUser(notification.recipientId, {
+        title: notification.title,
+        message: notification.message,
+        actionUrl: notification.actionUrl,
+        notificationId: notification.id,
+        type: notification.type,
+      }).catch((error) => console.error('Failed to send broadcast push notification', error?.message || error)),
+    ));
+    return notifications;
+  }
+
+  async listAnnouncements(recipientId: string, limit = 100) {
+    return this.repo.find({
+      where: { recipientId, type: 'GENERAL_ANNOUNCEMENT' },
+      order: { createdAt: 'DESC' },
+      take: Math.min(Math.max(limit, 1), 100),
+    });
+  }
+
   async list(recipientId: string, limit = 20) {
     const [items, unreadCount] = await Promise.all([
       this.repo.find({

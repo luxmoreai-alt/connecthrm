@@ -37,6 +37,15 @@ export interface Holiday {
   updatedAt: string;
 }
 
+export interface WorkdayOverride {
+  id: string;
+  date: string;
+  type: "WORKING_DAY" | "NON_WORKING_DAY";
+  reason: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const settingsApi = {
   get: () => api.get<OrgSettings>("/settings"),
 
@@ -62,6 +71,14 @@ export const settingsApi = {
 
   deleteHoliday: (id: string) =>
     api.delete(`/settings/holidays/${id}`),
+
+  listWorkdayOverrides: (year?: number) =>
+    api.get<WorkdayOverride[]>(`/settings/workday-overrides${year ? `?year=${year}` : ""}`),
+
+  saveWorkdayOverride: (data: { date: string; type: WorkdayOverride["type"]; reason: string }) =>
+    api.post<WorkdayOverride>("/settings/workday-overrides", data),
+
+  deleteWorkdayOverride: (id: string) => api.delete(`/settings/workday-overrides/${id}`),
 
   getSalaryConfig: () =>
     api.get<OrganizationSalaryConfig>("/settings/salary-config"),

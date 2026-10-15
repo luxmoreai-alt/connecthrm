@@ -21,6 +21,7 @@ import SectionCard from "@/components/ui/SectionCard";
 import {
   sharedDashboardApi,
   type HolidayCalendarEntry,
+  type WorkdayUpdate,
 } from "@/api/profile.api";
 
 const MONTHS = [
@@ -33,13 +34,19 @@ export default function EmployeeHolidayCalendarPage() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [holidays, setHolidays] = useState<HolidayCalendarEntry[]>([]);
+  const [workdayUpdates, setWorkdayUpdates] = useState<WorkdayUpdate[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
   const loadCalendar = useCallback(async () => {
     try {
       setLoading(true);
-      setHolidays(await sharedDashboardApi.getHolidayCalendar(year));
+      const [calendar, updates] = await Promise.all([
+        sharedDashboardApi.getHolidayCalendar(year),
+        sharedDashboardApi.getWorkdayUpdates(year),
+      ]);
+      setHolidays(calendar);
+      setWorkdayUpdates(updates);
     } catch (error: any) {
       setHolidays([]);
       toast({
@@ -117,6 +124,26 @@ export default function EmployeeHolidayCalendarPage() {
           <Text fontSize="2xl" color="brand.500" fontWeight="800">{year === currentYear ? upcomingCount : holidays.length}</Text>
         </Box>
       </SimpleGrid>
+
+      {workdayUpdates.length > 0 && (
+        <Box mb={5}>
+          <SectionCard title="Workday Updates" actions={<Badge colorScheme="purple">Important</Badge>}>
+            <VStack spacing={3} align="stretch">
+              {workdayUpdates.map((update) => (
+                <Flex key={update.id} gap={3} p={3} borderRadius="xl" bg={update.type === "WORKING_DAY" ? "green.50" : "orange.50"} border="1px solid" borderColor={update.type === "WORKING_DAY" ? "green.200" : "orange.200"}>
+                  <Box flex={1}>
+                    <Flex align="center" gap={2} flexWrap="wrap">
+                      <Text fontWeight="800" color="text.heading">{new Date(`${update.date}T00:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</Text>
+                      <Badge colorScheme={update.type === "WORKING_DAY" ? "green" : "orange"}>{update.type === "WORKING_DAY" ? "Working Day" : "Non-working Day"}</Badge>
+                    </Flex>
+                    <Text mt={1} fontSize="sm" color="text.body">Reason: {update.reason}</Text>
+                  </Box>
+                </Flex>
+              ))}
+            </VStack>
+          </SectionCard>
+        </Box>
+      )}
 
       {loading ? (
         <Flex justify="center" py={20}><Spinner size="lg" color="brand.500" /></Flex>

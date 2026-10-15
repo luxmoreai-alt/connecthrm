@@ -24,6 +24,7 @@ import { buildDefaultAttendancePolicy } from '../attendance/defaultAttendancePol
 import { env } from '../config/env';
 import { AppDataSource } from '../config/database';
 import { ShiftAssignment } from '../entities/ShiftAssignment.entity';
+import { WorkdayOverride, WorkdayOverrideType } from '../entities/WorkdayOverride.entity';
 
 interface GeoInput {
   latitude?: number;
@@ -994,13 +995,14 @@ export class AttendanceService {
     const policy = await this.ensureActivePolicy();
 
     const employees = await this.repo.findActiveEmployees();
-    const [dayRecords, leaves, holiday, profileMap, pendingRegularizations, pendingPermissions] = await Promise.all([
+    const [dayRecords, leaves, holiday, profileMap, pendingRegularizations, pendingPermissions, workdayOverride] = await Promise.all([
       this.repo.findDayRecordsByDate(date),
       this.repo.findApprovedLeavesForDate(date),
       this.repo.findHolidayByDate(date),
       this.repo.findEmployeeProfilesMap(employees.map((row) => row.id)),
       this.repo.findRegularizationRequests({ date, status: AttendanceRequestStatus.PENDING }),
       this.repo.findPermissionRequests({ date, status: AttendanceRequestStatus.PENDING }),
+      AppDataSource.getRepository(WorkdayOverride).findOne({ where: { date } }),
     ]);
 
     const dayRecordMap = new Map<string, Attendance>();
@@ -1035,7 +1037,7 @@ export class AttendanceService {
       let day = dayRecordMap.get(employee.id);
       if (!day) {
         const isPreJoining = Boolean(profile?.dateOfJoining && date < profile.dateOfJoining);
-        const syntheticDayType = isPreJoining
+        let syntheticDayType = isPreJoining
           ? ('PRE_JOINING' as AttendanceDayType)
           : holiday
             ? AttendanceDayType.HOLIDAY
@@ -1044,6 +1046,10 @@ export class AttendanceService {
               : this.isWeeklyOff(new Date(`${date}T00:00:00`), policy)
                 ? AttendanceDayType.WEEK_OFF
                 : AttendanceDayType.WORKING;
+        if (!isPreJoining && !leaveMap.has(employee.id) && workdayOverride) {
+          syntheticDayType = workdayOverride.type === WorkdayOverrideType.WORKING_DAY
+            ? AttendanceDayType.WORKING : AttendanceDayType.WEEK_OFF;
+        }
 
         const syntheticStatus =
           syntheticDayType === ('PRE_JOINING' as AttendanceDayType)
@@ -1572,7 +1578,7 @@ export class AttendanceService {
       forceRecomputeManualOverride?: boolean;
     },
   ) {
-    const [existing, leave, holiday, approvedPermission, approvedRegularization, punches, profile, shiftAssignment] =
+    const [existing, leave, holiday, approvedPermission, approvedRegularization, punches, profile, shiftAssignment, workdayOverride] =
       await Promise.all([
       this.repo.findDayRecord(employeeId, date),
       this.repo.findApprovedLeaveForEmployeeDate(employeeId, date),
@@ -1585,6 +1591,7 @@ export class AttendanceService {
         where: { employeeId, shiftDate: date },
         relations: { shift: true },
       }),
+      AppDataSource.getRepository(WorkdayOverride).findOne({ where: { date } }),
     ]);
 
     const dayPolicy = shiftAssignment?.shift
@@ -1629,6 +1636,10 @@ export class AttendanceService {
     // working day. Holiday and approved-leave precedence remain unchanged.
     if (shiftAssignment && dayType === AttendanceDayType.WEEK_OFF) {
       dayType = AttendanceDayType.WORKING;
+    }
+    if (dayType !== ('PRE_JOINING' as AttendanceDayType) && !leave && workdayOverride) {
+      dayType = workdayOverride.type === WorkdayOverrideType.WORKING_DAY
+        ? AttendanceDayType.WORKING : AttendanceDayType.WEEK_OFF;
     }
 
     const sessions = this.buildSessions(date, punches, dayPolicy);
@@ -1690,6 +1701,8 @@ export class AttendanceService {
         shiftCode: shiftAssignment?.shift?.code ?? null,
         scheduledStartTime: dayPolicy.workStartTime,
         scheduledEndTime: dayPolicy.workEndTime,
+        workdayOverrideType: workdayOverride?.type ?? null,
+        workdayOverrideReason: workdayOverride?.reason ?? null,
       },
       isAutoClosed: patchedSessions.some((session) => session.isAutoClosed),
       locationValidated:

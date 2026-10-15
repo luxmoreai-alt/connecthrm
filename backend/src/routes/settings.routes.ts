@@ -231,5 +231,8 @@ router.put('/holidays/:id', asyncHandler(SettingsController.updateHoliday));
  *         description: Not found
  */
 router.delete('/holidays/:id', asyncHandler(SettingsController.deleteHoliday));
+router.get('/workday-overrides', asyncHandler(SettingsController.listWorkdayOverrides));
+router.post('/workday-overrides', asyncHandler(SettingsController.saveWorkdayOverride));
+router.delete('/workday-overrides/:id', asyncHandler(SettingsController.deleteWorkdayOverride));
 
 export default router;

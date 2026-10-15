@@ -21,6 +21,7 @@ import { parsePayrollExcel, ParsedRow } from './excel.service';
 import { OrgSettings, AlternateSaturdayRule } from '../entities/OrgSettings.entity';
 import { Holiday } from '../entities/Holiday.entity';
 import { ShiftAssignment } from '../entities/ShiftAssignment.entity';
+import { WorkdayOverride, WorkdayOverrideType } from '../entities/WorkdayOverride.entity';
 import { ApiError } from '../utils/apiError';
 import { env } from '../config/env';
 import { transporter } from '../config/mail';
@@ -1333,6 +1334,7 @@ export class PayrollService {
     const leaveRepo = AppDataSource.getRepository(LeaveRequest);
     const holidayRepo = AppDataSource.getRepository(Holiday);
     const shiftAssignmentRepo = AppDataSource.getRepository(ShiftAssignment);
+    const workdayOverrideRepo = AppDataSource.getRepository(WorkdayOverride);
 
     const lastDay = new Date(year, month, 0).getDate();
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -1353,7 +1355,7 @@ export class PayrollService {
       // fallback defaults
     }
 
-    const [holidays, shiftAssignments] = await Promise.all([
+    const [holidays, shiftAssignments, workdayOverrides] = await Promise.all([
       holidayRepo
         .createQueryBuilder('h')
         .where('h.date >= :start AND h.date <= :end', { start: startDate, end: endDate })
@@ -1363,9 +1365,14 @@ export class PayrollService {
         .where('sa.employeeId = :employeeId', { employeeId })
         .andWhere('sa.shiftDate >= :start AND sa.shiftDate <= :end', { start: startDate, end: endDate })
         .getMany(),
+      workdayOverrideRepo
+        .createQueryBuilder('wo')
+        .where('wo.date >= :start AND wo.date <= :end', { start: startDate, end: endDate })
+        .getMany(),
     ]);
     const holidaySet = new Set(holidays.map((h) => h.date));
     const allocatedShiftDates = new Set(shiftAssignments.map((assignment) => assignment.shiftDate));
+    const workdayOverrideMap = new Map(workdayOverrides.map((row) => [row.date, row.type]));
 
     const DAY_NAMES = [
       'SUNDAY',
@@ -1385,6 +1392,10 @@ export class PayrollService {
         2,
         '0',
       )}`;
+
+      const override = workdayOverrideMap.get(dateStr);
+      if (override === WorkdayOverrideType.WORKING_DAY) return 'WORKING';
+      if (override === WorkdayOverrideType.NON_WORKING_DAY) return 'WEEK_OFF';
 
       if (holidaySet.has(dateStr)) return 'HOLIDAY';
       if (allocatedShiftDates.has(dateStr)) return 'WORKING';
