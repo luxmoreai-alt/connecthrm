@@ -11,6 +11,15 @@ export interface ShiftDayInput {
   note?: string;
 }
 
+export interface ShiftDefinitionInput {
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  color: string;
+  isNightShift: boolean;
+}
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseDate(value?: string): Date {
@@ -66,6 +75,43 @@ export class ShiftService {
       order: { startTime: 'ASC', name: 'ASC' },
     });
     return shifts.map(serializeShift);
+  }
+
+  async createDefinition(input: ShiftDefinitionInput) {
+    const existing = await this.definitionRepository.findOne({ where: { code: input.code } });
+    if (existing) {
+      throw ApiError.badRequest('A shift with this code already exists', 'SHIFT_CODE_EXISTS');
+    }
+
+    const shift = this.definitionRepository.create({ ...input, isActive: true });
+    try {
+      return serializeShift(await this.definitionRepository.save(shift));
+    } catch (error) {
+      if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') {
+        throw ApiError.badRequest('A shift with this code already exists', 'SHIFT_CODE_EXISTS');
+      }
+      throw error;
+    }
+  }
+
+  async updateDefinition(shiftId: string, input: ShiftDefinitionInput) {
+    const shift = await this.definitionRepository.findOne({ where: { id: shiftId, isActive: true } });
+    if (!shift) throw ApiError.notFound('Shift timing not found', 'SHIFT_NOT_FOUND');
+
+    const existing = await this.definitionRepository.findOne({ where: { code: input.code } });
+    if (existing && existing.id !== shift.id) {
+      throw ApiError.badRequest('A shift with this code already exists', 'SHIFT_CODE_EXISTS');
+    }
+
+    this.definitionRepository.merge(shift, input);
+    try {
+      return serializeShift(await this.definitionRepository.save(shift));
+    } catch (error) {
+      if ((error as { driverError?: { code?: string } }).driverError?.code === '23505') {
+        throw ApiError.badRequest('A shift with this code already exists', 'SHIFT_CODE_EXISTS');
+      }
+      throw error;
+    }
   }
 
   async getEmployeeWeek(employeeId: string, requestedStart?: string) {

@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge, Box, Button, Flex, FormControl, FormLabel, HStack, Input, InputGroup,
-  InputLeftElement, Select, SimpleGrid, Spinner, Text, Textarea, useToast,
+  InputLeftElement, Select, SimpleGrid, Spinner, Text, Textarea, useDisclosure, useToast,
 } from "@chakra-ui/react";
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw, Save, Search, Users } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock3, RefreshCw, Save, Search, Users } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
+import ShiftTimingManager from "@/components/shifts/ShiftTimingManager";
 import { shiftApi, type AdminShiftEmployee, type AdminShiftWeek, type SaveShiftDay } from "@/api/shift.api";
 
 function mondayKey(date = new Date()) {
@@ -36,6 +37,7 @@ function weekLabel(start: string, end?: string) {
 
 export default function AdminShiftsPage() {
   const toast = useToast();
+  const timingModal = useDisclosure();
   const [weekStart, setWeekStart] = useState(mondayKey);
   const [data, setData] = useState<AdminShiftWeek | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -91,7 +93,8 @@ export default function AdminShiftsPage() {
   return (
     <Box>
       <PageHeader title="Shift Allocation" subtitle="Plan and publish weekly shifts for every employee." actions={
-        <HStack>
+        <HStack flexWrap="wrap" justify="flex-end">
+          <Button leftIcon={<Clock3 size={17} />} colorScheme="blue" onClick={timingModal.onOpen}>Manage shift timings</Button>
           <Button leftIcon={<ChevronLeft size={17} />} variant="outline" onClick={() => setWeekStart(moveWeek(weekStart, -1))}>Previous</Button>
           <Button variant="outline" onClick={() => setWeekStart(mondayKey())}>This week</Button>
           <Button rightIcon={<ChevronRight size={17} />} variant="outline" onClick={() => setWeekStart(moveWeek(weekStart, 1))}>Next</Button>
@@ -141,6 +144,12 @@ export default function AdminShiftsPage() {
           </SectionCard>
         </Flex>
       )}
+      <ShiftTimingManager
+        isOpen={timingModal.isOpen}
+        onClose={timingModal.onClose}
+        definitions={data?.definitions || []}
+        onChanged={load}
+      />
     </Box>
   );
 }

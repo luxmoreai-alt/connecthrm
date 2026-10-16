@@ -52,11 +52,24 @@ export interface SaveShiftDay {
   note?: string;
 }
 
+export interface SaveShiftDefinition {
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  color: string;
+  isNightShift: boolean;
+}
+
 export const shiftApi = {
   getMyWeek: (weekStart: string) =>
     api.get<EmployeeShiftWeek>(`/shifts/me/week?weekStart=${encodeURIComponent(weekStart)}`),
   getAdminWeek: (weekStart: string) =>
     api.get<AdminShiftWeek>(`/shifts/admin/week?weekStart=${encodeURIComponent(weekStart)}`),
+  createDefinition: (definition: SaveShiftDefinition) =>
+    api.post<ShiftDefinition>('/shifts/admin/definitions', definition),
+  updateDefinition: (shiftId: string, definition: SaveShiftDefinition) =>
+    api.put<ShiftDefinition>(`/shifts/admin/definitions/${shiftId}`, definition),
   saveEmployeeWeek: (employeeId: string, weekStart: string, assignments: SaveShiftDay[]) =>
     api.put<EmployeeShiftWeek>(`/shifts/admin/week/${employeeId}`, { weekStart, assignments }),
 };
