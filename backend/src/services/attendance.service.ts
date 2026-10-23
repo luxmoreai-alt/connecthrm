@@ -775,6 +775,22 @@ export class AttendanceService {
     };
   }
 
+  async getAdminRegularizationRequests(status?: AttendanceRequestStatus) {
+    const regularizations = await this.repo.findRegularizationRequests({ status });
+    const employeeIds = Array.from(new Set(regularizations.map((row) => row.employeeId)));
+    const employees = await Promise.all(employeeIds.map((id) => this.repo.findEmployeeById(id)));
+    const employeeMap = new Map<string, any>();
+    employees.forEach((employee) => {
+      if (employee) employeeMap.set(employee.id, employee);
+    });
+
+    return regularizations.map((row) => ({
+      ...this.mapRegularizationRequest(row),
+      employeeName: this.getEmployeeName(employeeMap.get(row.employeeId)),
+      employeeCode: employeeMap.get(row.employeeId)?.empId ?? null,
+    }));
+  }
+
   async listEmployeeAccessOverrides(search?: string) {
     const rows = await this.repo.listEmployeeAccessOverrides({
       search: search?.trim() || undefined,

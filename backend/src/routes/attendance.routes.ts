@@ -40,6 +40,11 @@ router.get(
   asyncHandler(AttendanceController.getAdminPendingRequests),
 );
 router.get(
+  '/admin/regularizations',
+  roleMiddleware('ADMIN'),
+  asyncHandler(AttendanceController.listAdminRegularizations),
+);
+router.get(
   '/admin/access-overrides',
   roleMiddleware('ADMIN'),
   asyncHandler(AttendanceController.listEmployeeAccessOverrides),

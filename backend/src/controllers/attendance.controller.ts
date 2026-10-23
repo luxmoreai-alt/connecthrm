@@ -1,6 +1,7 @@
 ﻿import { Request, Response } from 'express';
 import { AttendanceService } from '../services/attendance.service';
 import { AttendanceStatus } from '../entities/Attendance.entity';
+import { AttendanceRequestStatus } from '../attendance/attendance.enums';
 import {
   startWorkSchema,
   endWorkSchema,
@@ -182,6 +183,17 @@ export class AttendanceController {
   static async getAdminPendingRequests(_req: Request, res: Response): Promise<void> {
     const result = await attendanceService.getAdminPendingRequests();
     ApiResponse.success(res, 'Pending attendance requests retrieved', result);
+  }
+
+  static async listAdminRegularizations(req: Request, res: Response): Promise<void> {
+    const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
+    if (rawStatus && !Object.values(AttendanceRequestStatus).includes(rawStatus as AttendanceRequestStatus)) {
+      throw ApiError.badRequest('Invalid regularization status', 'INVALID_REGULARIZATION_STATUS');
+    }
+    const result = await attendanceService.getAdminRegularizationRequests(
+      rawStatus as AttendanceRequestStatus | undefined,
+    );
+    ApiResponse.success(res, 'Regularization history retrieved', result);
   }
 
   static async listEmployeeAccessOverrides(req: Request, res: Response): Promise<void> {

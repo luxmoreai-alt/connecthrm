@@ -474,6 +474,11 @@ export const attendanceApi = {
       "/attendance/admin/pending-requests",
     ),
 
+  getAdminRegularizations: (status?: RegularizationRequest["status"]) =>
+    api.get<RegularizationRequest[]>(
+      `/attendance/admin/regularizations${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
+
   listEmployeeAccessOverrides: (search?: string) =>
     api.get<EmployeeAttendanceAccessOverride[]>(
       `/attendance/admin/access-overrides${search ? `?search=${encodeURIComponent(search)}` : ""}`,

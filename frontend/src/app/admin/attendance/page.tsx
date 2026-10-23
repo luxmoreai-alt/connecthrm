@@ -135,6 +135,17 @@ function formatDateLabel(date: string): string {
   });
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function requestBadge(status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED") {
   if (status === "APPROVED") return { bg: "#EAF8F0", color: "#0F7A46" };
   if (status === "REJECTED") return { bg: "#FDECEC", color: "#AE1F44" };
@@ -183,7 +194,8 @@ export default function AdminAttendancePage() {
   const [department, setDepartment] = useState("");
 
   const [data, setData] = useState<AdminAttendanceResponse | null>(null);
-  const [pendingRegularizations, setPendingRegularizations] = useState<RegularizationRequest[]>([]);
+  const [regularizations, setRegularizations] = useState<RegularizationRequest[]>([]);
+  const [regularizationStatus, setRegularizationStatus] = useState<"ALL" | RegularizationRequest["status"]>("ALL");
   const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
   const [accessOverrides, setAccessOverrides] = useState<EmployeeAttendanceAccessOverride[]>([]);
   const [employeeOptions, setEmployeeOptions] = useState<Array<{ userId: string; firstName: string; lastName: string; empId: string | null }>>([]);
@@ -194,6 +206,7 @@ export default function AdminAttendancePage() {
   const [dayDetail, setDayDetail] = useState<AdminAttendanceDayDetailsResponse | null>(null);
   const [monthly, setMonthly] = useState<MonthlyAttendanceResponse | null>(null);
   const [monthlyEmployeeName, setMonthlyEmployeeName] = useState("");
+  const [selectedRegularization, setSelectedRegularization] = useState<RegularizationRequest | null>(null);
 
   const [overrideStatus, setOverrideStatus] = useState<AttendanceStatusType>("PRESENT");
   const [overrideReason, setOverrideReason] = useState("");
@@ -210,17 +223,19 @@ export default function AdminAttendancePage() {
   const monthlyModal = useDisclosure();
   const dayDetailDrawer = useDisclosure();
   const accessOverrideModal = useDisclosure();
+  const regularizationDetailModal = useDisclosure();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [attendance, pending, overrides] = await Promise.all([
+      const [attendance, pending, regularizationHistory, overrides] = await Promise.all([
         attendanceApi.getAdminAttendance(date, statusFilter || undefined, search || undefined, department || undefined),
         attendanceApi.getAdminPendingRequests(),
+        attendanceApi.getAdminRegularizations(),
         attendanceApi.listEmployeeAccessOverrides(),
       ]);
       setData(attendance);
-      setPendingRegularizations(pending.regularizations);
+      setRegularizations(regularizationHistory);
       setPendingPermissions(pending.permissions);
       setAccessOverrides(overrides);
     } catch {
@@ -264,10 +279,17 @@ export default function AdminAttendancePage() {
 
   const tabCounts = useMemo(() => ({
     register: data?.records.length ?? 0,
-    regularizations: pendingRegularizations.length,
+    regularizations: regularizations.length,
     permissions: pendingPermissions.length,
     overrides: accessOverrides.length,
-  }), [accessOverrides.length, data?.records.length, pendingPermissions.length, pendingRegularizations.length]);
+  }), [accessOverrides.length, data?.records.length, pendingPermissions.length, regularizations.length]);
+
+  const visibleRegularizations = useMemo(
+    () => regularizationStatus === "ALL"
+      ? regularizations
+      : regularizations.filter((request) => request.status === regularizationStatus),
+    [regularizationStatus, regularizations],
+  );
 
   const refresh = async () => {
     setRefreshing(true);
@@ -359,6 +381,11 @@ export default function AdminAttendancePage() {
     }
   };
 
+  const openRegularizationDetails = (request: RegularizationRequest) => {
+    setSelectedRegularization(request);
+    regularizationDetailModal.onOpen();
+  };
+
   const reviewPermission = async (id: string, approved: boolean) => {
     setActionLoading(true);
     try {
@@ -430,7 +457,7 @@ export default function AdminAttendancePage() {
         <Tabs isLazy variant="unstyled">
           <TabList px={4} pt={4} gap={2} flexWrap="wrap">
             <AdminTab label="Daily Register" count={tabCounts.register} />
-            <AdminTab label="Pending Regularizations" count={tabCounts.regularizations} />
+            <AdminTab label="Regularization History" count={tabCounts.regularizations} />
             <AdminTab label="Pending Permissions" count={tabCounts.permissions} />
             <AdminTab label="Access Overrides" count={tabCounts.overrides} />
           </TabList>
@@ -475,25 +502,56 @@ export default function AdminAttendancePage() {
             </TabPanel>
 
             <TabPanel pt={4}>
-              <Table size="sm">
-                <Thead><Tr><Th>Employee</Th><Th>Date</Th><Th>Type</Th><Th>Requested</Th><Th>Reason</Th><Th>Status</Th><Th textAlign="right">Actions</Th></Tr></Thead>
-                <Tbody>
-                  {pendingRegularizations.length === 0 ? <Tr><Td colSpan={7} textAlign="center" py={7}><Text color="text.muted">No pending regularizations.</Text></Td></Tr> : pendingRegularizations.map((r) => {
-                    const b = requestBadge(r.status);
-                    return (
-                      <Tr key={r.id}>
-                        <Td>{r.employeeName || r.employeeId}</Td>
-                        <Td>{formatDateLabel(r.date)}</Td>
-                        <Td>{r.requestType.replace(/_/g, " ")}</Td>
-                        <Td>{r.requestedInTime ? formatTime(r.requestedInTime) : "-"} / {r.requestedOutTime ? formatTime(r.requestedOutTime) : "-"}</Td>
-                        <Td><Text noOfLines={2}>{r.reason}</Text></Td>
-                        <Td><Badge bg={b.bg} color={b.color} borderRadius="full">{r.status}</Badge></Td>
-                        <Td textAlign="right"><HStack justify="flex-end" spacing={1}><IconButton aria-label="View" icon={<Eye size={14} />} size="xs" variant="ghost" onClick={() => openDayDetail(r.employeeId, r.date)} /><Button size="xs" colorScheme="green" leftIcon={<Check size={12} />} onClick={() => reviewRegularization(r.id, true)} isLoading={actionLoading}>Approve</Button><Button size="xs" colorScheme="red" variant="outline" leftIcon={<X size={12} />} onClick={() => reviewRegularization(r.id, false)} isLoading={actionLoading}>Reject</Button></HStack></Td>
-                      </Tr>
-                    );
-                  })}
-                </Tbody>
-              </Table>
+              <Flex mb={3} justify="space-between" align="center" gap={3} flexWrap="wrap">
+                <Text fontSize="sm" color="text.muted">All submitted regularization requests are retained here.</Text>
+                <Select
+                  size="sm"
+                  maxW="190px"
+                  value={regularizationStatus}
+                  onChange={(e) => setRegularizationStatus(e.target.value as typeof regularizationStatus)}
+                  aria-label="Filter regularization history by status"
+                >
+                  <option value="ALL">All statuses</option>
+                  <option value="PENDING">Pending</option>
+                  <option value="APPROVED">Approved</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </Select>
+              </Flex>
+              <Box overflowX="auto">
+                <Table size="sm">
+                  <Thead><Tr><Th>Employee</Th><Th>Date</Th><Th>Type</Th><Th>Requested</Th><Th>Reason</Th><Th>Status</Th><Th textAlign="right">Actions</Th></Tr></Thead>
+                  <Tbody>
+                    {visibleRegularizations.length === 0 ? <Tr><Td colSpan={7} textAlign="center" py={7}><Text color="text.muted">No regularization requests found.</Text></Td></Tr> : visibleRegularizations.map((r) => {
+                      const b = requestBadge(r.status);
+                      return (
+                        <Tr key={r.id}>
+                          <Td>{r.employeeName || r.employeeId}</Td>
+                          <Td>{formatDateLabel(r.date)}</Td>
+                          <Td>{r.requestType.replace(/_/g, " ")}</Td>
+                          <Td>{r.requestedInTime ? formatTime(r.requestedInTime) : "-"} / {r.requestedOutTime ? formatTime(r.requestedOutTime) : "-"}</Td>
+                          <Td maxW="340px">
+                            <Box as="button" type="button" textAlign="left" w="100%" onClick={() => openRegularizationDetails(r)} _hover={{ color: "brand.600" }}>
+                              <Text noOfLines={2}>{r.reason}</Text>
+                              <Text fontSize="xs" color="brand.500" fontWeight="600">View full reason</Text>
+                            </Box>
+                          </Td>
+                          <Td><Badge bg={b.bg} color={b.color} borderRadius="full">{r.status}</Badge></Td>
+                          <Td textAlign="right">
+                            <HStack justify="flex-end" spacing={1}>
+                              <IconButton aria-label="View regularization details" icon={<Eye size={14} />} size="xs" variant="ghost" onClick={() => openRegularizationDetails(r)} />
+                              {r.status === "PENDING" && <>
+                                <Button size="xs" colorScheme="green" leftIcon={<Check size={12} />} onClick={() => reviewRegularization(r.id, true)} isLoading={actionLoading}>Approve</Button>
+                                <Button size="xs" colorScheme="red" variant="outline" leftIcon={<X size={12} />} onClick={() => reviewRegularization(r.id, false)} isLoading={actionLoading}>Reject</Button>
+                              </>}
+                            </HStack>
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              </Box>
             </TabPanel>
 
             <TabPanel pt={4}>
@@ -542,6 +600,65 @@ export default function AdminAttendancePage() {
           </TabPanels>
         </Tabs>
       </SectionCard>
+
+      <Modal isOpen={regularizationDetailModal.isOpen} onClose={regularizationDetailModal.onClose} size="lg" isCentered>
+        <ModalOverlay />
+        <ModalContent borderRadius="xl">
+          <ModalHeader fontSize="md">Regularization Request Details</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {selectedRegularization && (() => {
+              const badge = requestBadge(selectedRegularization.status);
+              return (
+                <Flex direction="column" gap={4}>
+                  <Flex justify="space-between" gap={3} align="flex-start">
+                    <Box>
+                      <Text fontWeight="700">{selectedRegularization.employeeName || selectedRegularization.employeeId}</Text>
+                      <Text fontSize="xs" color="text.muted">{selectedRegularization.employeeCode || "No employee code"}</Text>
+                    </Box>
+                    <Badge bg={badge.bg} color={badge.color} borderRadius="full">{selectedRegularization.status}</Badge>
+                  </Flex>
+                  <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={2}>
+                    <Metric label="Attendance Date" value={formatDateLabel(selectedRegularization.date)} />
+                    <Metric label="Request Type" value={selectedRegularization.requestType.replace(/_/g, " ")} />
+                    <Metric label="Requested In" value={formatTime(selectedRegularization.requestedInTime)} />
+                    <Metric label="Requested Out" value={formatTime(selectedRegularization.requestedOutTime)} />
+                    <Metric label="Submitted" value={formatDateTime(selectedRegularization.createdAt)} />
+                    <Metric label="Reviewed" value={formatDateTime(selectedRegularization.reviewedAt)} />
+                  </SimpleGrid>
+                  <Box border="1px solid" borderColor="surface.border" borderRadius="xl" p={4}>
+                    <Text fontSize="xs" textTransform="uppercase" color="text.muted" mb={2}>Full Reason</Text>
+                    <Text whiteSpace="pre-wrap" overflowWrap="anywhere">{selectedRegularization.reason}</Text>
+                  </Box>
+                  {selectedRegularization.adminRemarks && (
+                    <Box border="1px solid" borderColor="surface.border" borderRadius="xl" p={4} bg="gray.50">
+                      <Text fontSize="xs" textTransform="uppercase" color="text.muted" mb={2}>Admin Remarks</Text>
+                      <Text whiteSpace="pre-wrap" overflowWrap="anywhere">{selectedRegularization.adminRemarks}</Text>
+                    </Box>
+                  )}
+                </Flex>
+              );
+            })()}
+          </ModalBody>
+          <ModalFooter gap={2} flexWrap="wrap">
+            {selectedRegularization && <Button size="sm" variant="outline" onClick={() => {
+              regularizationDetailModal.onClose();
+              openDayDetail(selectedRegularization.employeeId, selectedRegularization.date);
+            }}>View Attendance Day</Button>}
+            {selectedRegularization?.status === "PENDING" && <>
+              <Button size="sm" colorScheme="green" leftIcon={<Check size={14} />} isLoading={actionLoading} onClick={async () => {
+                await reviewRegularization(selectedRegularization.id, true);
+                regularizationDetailModal.onClose();
+              }}>Approve</Button>
+              <Button size="sm" colorScheme="red" variant="outline" leftIcon={<X size={14} />} isLoading={actionLoading} onClick={async () => {
+                await reviewRegularization(selectedRegularization.id, false);
+                regularizationDetailModal.onClose();
+              }}>Reject</Button>
+            </>}
+            <Button size="sm" variant="ghost" onClick={regularizationDetailModal.onClose}>Close</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <Drawer isOpen={dayDetailDrawer.isOpen} placement="right" size="md" onClose={dayDetailDrawer.onClose}>
         <DrawerOverlay />
