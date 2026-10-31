@@ -78,6 +78,9 @@ async function request<T = unknown>(
   const res = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
+    // HR data changes frequently (for example when an admin overrides an
+    // attendance day). Never let the browser reuse an older GET response.
+    cache: options.cache ?? (options.method === "GET" ? "no-store" : undefined),
     credentials: "include", // send httpOnly cookies (refresh token)
   });
 

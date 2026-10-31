@@ -179,23 +179,24 @@ const MONTH_NAMES = [
   "December",
 ];
 
-type FinalDisplayStatus =
-  | "PRESENT"
-  | "HALF_DAY"
-  | "LOP"
-  | "LEAVE"
-  | "HOLIDAY"
-  | "WEEK_OFF"
-  | "NOT_STARTED";
+type FinalDisplayStatus = AttendanceStatusType;
 
 const DISPLAY_STATUS_CODE_MAP: Partial<Record<FinalDisplayStatus, string>> = {
   PRESENT: "P",
+  LATE: "LT",
+  ABSENT: "A",
   WEEK_OFF: "WO",
   HOLIDAY: "H",
   LOP: "LOP",
   HALF_DAY: "HD",
   NOT_STARTED: "NS",
   LEAVE: "L",
+  MISSED_CHECK_IN: "MI",
+  PERMISSION: "PM",
+  REGULARIZED: "R",
+  MISSING_PUNCH: "MP",
+  EARLY_OUT: "EO",
+  OVERTIME: "OT",
 };
 
 const LEGEND_ITEMS: Array<{ code: string; label: string; status: AttendanceStatusType }> = [
@@ -275,6 +276,11 @@ function resolveFinalDisplayStatus(
   date: string,
   todayDate: string,
 ): FinalDisplayStatus {
+  // An explicit HR decision must be shown exactly as saved. Applying the
+  // normal payroll grouping here made several different override statuses
+  // appear unchanged in the employee calendar.
+  if (record.isManualOverride) return record.status;
+
   if (record.dayType === "PRE_JOINING") return "NOT_STARTED";
   if (record.dayType === "HOLIDAY" || record.status === "HOLIDAY") return "HOLIDAY";
   if (record.dayType === "WEEK_OFF" || record.status === "WEEK_OFF") return "WEEK_OFF";
@@ -303,7 +309,7 @@ function getStatusCode(
   isCurrentDate: boolean,
 ): string {
   if (displayStatus === "LEAVE") return getLeaveCode(record);
-  if (displayStatus === "NOT_STARTED" && !isCurrentDate) return "";
+  if (displayStatus === "NOT_STARTED" && !isCurrentDate && !record.isManualOverride) return "";
   return DISPLAY_STATUS_CODE_MAP[displayStatus] ?? "";
 }
 
@@ -358,9 +364,10 @@ export default function EmployeeAttendancePage() {
     setSelectedDay(details);
   }, []);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [state, monthData] = await Promise.all([
         attendanceApi.getMyState(),
         attendanceApi.getMyMonthlyAttendance(activeMonth.year, activeMonth.month),
@@ -371,20 +378,43 @@ export default function EmployeeAttendancePage() {
       const dateToLoad = selectedDate || toDateInput(new Date());
       await loadSelectedDay(dateToLoad);
     } catch {
-      toast({
-        title: "Failed to load attendance",
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-        position: "top-right",
-      });
+      if (!silent) {
+        toast({
+          title: "Failed to load attendance",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "top-right",
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [activeMonth.month, activeMonth.year, loadSelectedDay, selectedDate, toast]);
 
   useEffect(() => {
-    loadAll();
+    void loadAll();
+  }, [loadAll]);
+
+  useEffect(() => {
+    const refreshFromServer = () => {
+      if (document.visibilityState === "visible") {
+        void loadAll({ silent: true });
+      }
+    };
+
+    // An HR override can happen while the employee keeps this page open or
+    // while the installed app is in the background. Refresh on return and at
+    // a short interval so the calendar converges without a manual reload.
+    window.addEventListener("focus", refreshFromServer);
+    document.addEventListener("visibilitychange", refreshFromServer);
+    const refreshTimer = window.setInterval(refreshFromServer, 30_000);
+
+    return () => {
+      window.removeEventListener("focus", refreshFromServer);
+      document.removeEventListener("visibilitychange", refreshFromServer);
+      window.clearInterval(refreshTimer);
+    };
   }, [loadAll]);
 
   const submitPunch = async (photo?: File) => {
@@ -986,7 +1016,7 @@ export default function EmployeeAttendancePage() {
                 {!todayState ? "Attendance unavailable" : todayState.nextPunchType === "CHECK_IN" ? "Punch In" : "Punch Out"}
               </Button>
 
-              <Button variant="ghost" leftIcon={<RefreshCw size={15} />} onClick={loadAll}>Refresh attendance</Button>
+              <Button variant="ghost" leftIcon={<RefreshCw size={15} />} onClick={() => void loadAll()}>Refresh attendance</Button>
             </Flex>
           </SectionCard>
         </GridItem>

@@ -82,6 +82,10 @@ function formatMinutes(value: number) {
 }
 
 function resolveStatus(record: AttendanceRecord, today: string): AttendanceStatusType {
+  // Keep explicit HR overrides authoritative in the calendar. Derived fields
+  // such as lateMinutes belong to the original punch calculation and must not
+  // replace the status the admin selected.
+  if (record.isManualOverride) return record.status;
   if (record.dayType === "PRE_JOINING" || record.date > today) return "NOT_STARTED";
   if (record.dayType === "HOLIDAY") return "HOLIDAY";
   if (record.dayType === "WEEK_OFF") return "WEEK_OFF";

@@ -83,6 +83,13 @@ app.use((_req, res, next) => {
   res.setHeader('X-Connect-HR-Revision', backendRevision);
   next();
 });
+app.use('/api', (_req, res, next) => {
+  // Authenticated HR responses must always reflect the current database
+  // state, including attendance changes made from another signed-in client.
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
 // Vercel starts the Express application without running server.ts. Initialize
 // TypeORM lazily and reuse the connection while the function instance is warm.
