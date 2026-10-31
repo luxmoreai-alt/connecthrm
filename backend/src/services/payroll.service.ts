@@ -343,7 +343,7 @@ export class PayrollService {
     const attendance = await this.computeAttendance(user.id, month, year, profile?.dateOfJoining);
 
     // Smart merge: Excel fields override system, missing fields fallback to system
-    const prorationFactor = this.getJoiningMonthProrationFactor(attendance);
+    const prorationFactor = this.getPayableDayProrationFactor(attendance);
     const earnings = row.earnings.length > 0
       ? this.mergeEarnings(row.earnings, salary, salaryStructure)
       : this.prorateComponents(
@@ -360,8 +360,9 @@ export class PayrollService {
     // Determine effective LOP days (Excel override or system computed)
     const effectiveLopDays = row.lopDays ?? attendance.lopDays;
 
-    // Auto-add LOP deduction if applicable (same logic as previewPayroll)
-    if (effectiveLopDays > 0) {
+    // System-derived earnings are already prorated using payable days. Only
+    // explicit Excel earnings need a separate LOP deduction.
+    if (effectiveLopDays > 0 && row.earnings.length > 0) {
       const basic = earnings.find((e) => e.name.toLowerCase() === 'basic');
       const effectiveEligibleDays = row.earnings.length > 0
         ? row.workingDays ?? attendance.eligibleWorkingDays
@@ -1222,7 +1223,7 @@ export class PayrollService {
       profile?.dateOfJoining,
     );
 
-    const prorationFactor = this.getJoiningMonthProrationFactor(attendance);
+    const prorationFactor = this.getPayableDayProrationFactor(attendance);
     const earnings = this.prorateComponents(
       this.mergeEarnings([], salary, salaryStructure),
       prorationFactor,
@@ -1231,20 +1232,6 @@ export class PayrollService {
       this.mergeDeductions([], salary, salaryStructure),
       prorationFactor,
     );
-
-    const lopDays = Number(attendance.lopDays) || 0;
-    if (lopDays > 0 && attendance.eligibleWorkingDays > 0) {
-      const lopBase =
-        this.findComponentAmount(earnings, ['basic']) ||
-        this.findComponentAmount(earnings, ['gross']) ||
-        earnings.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-      const lopDeduction = round2((lopBase / attendance.eligibleWorkingDays) * lopDays);
-      const existingLopIdx = deductions.findIndex((d) =>
-        d.name.toLowerCase().includes('lop'),
-      );
-      if (existingLopIdx >= 0) deductions.splice(existingLopIdx, 1);
-      deductions.push({ name: 'LOP Deduction', amount: lopDeduction });
-    }
 
     const pfEmployeeContribution = round2(
       this.extractPfEmployeeContribution(salary, salaryStructure) * prorationFactor,
@@ -1807,13 +1794,13 @@ export class PayrollService {
   }
 
   /**
-   * Salary structures contain full-month values. In an employee's joining
-   * month, pay only the working days for which they were employed. Attendance
-   * LOP is applied separately after this proration.
+   * Salary structures contain full-month values. Pay every component in
+   * proportion to actual payable days so joining dates, absences, half-days,
+   * and LOP all reduce salary consistently.
    */
-  private getJoiningMonthProrationFactor(attendance: AttendanceComputation): number {
+  private getPayableDayProrationFactor(attendance: AttendanceComputation): number {
     if (attendance.workingDays <= 0) return 0;
-    return Math.min(1, Math.max(0, attendance.eligibleWorkingDays / attendance.workingDays));
+    return Math.min(1, Math.max(0, attendance.payableDays / attendance.workingDays));
   }
 
   private prorateComponents(
