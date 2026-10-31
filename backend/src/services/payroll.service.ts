@@ -916,7 +916,9 @@ export class PayrollService {
       employeeIds = employees.map((employee) => employee.id);
     }
 
-    const BATCH_SIZE = 8;
+    // Keep each request within the serverless time limit while parallelizing
+    // enough employees to finish normal organization-sized runs quickly.
+    const BATCH_SIZE = 12;
     const start = Math.max(0, run.processedCount || 0);
     const batch = employeeIds.slice(start, start + BATCH_SIZE);
     const overwriteExisting = summary.overwriteExisting === true;

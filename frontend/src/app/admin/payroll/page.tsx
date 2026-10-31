@@ -905,11 +905,16 @@ function BulkGenerateTab({
   const [dispatchTarget, setDispatchTarget] = useState<PayrollRun | null>(null);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
+  const [liveRun, setLiveRun] = useState<PayrollRun | null>(null);
   const [resumeVersion, setResumeVersion] = useState(0);
   const dispatchDisclosure = useDisclosure();
   const toast = useToast();
   const processingRun = runs.find((run) => run.status === "PROCESSING" && run.runType === "SYSTEM_BULK");
   const processingRef = useRef<string | null>(null);
+  const displayedRuns = useMemo(
+    () => runs.map((run) => liveRun?.id === run.id ? { ...run, ...liveRun } : run),
+    [liveRun, runs],
+  );
 
   const refreshRuns = useCallback(async () => {
     await onComplete();
@@ -929,12 +934,11 @@ function BulkGenerateTab({
         while (!cancelled && currentStatus === "PROCESSING") {
           const updated = await payrollApi.processBulkRun(runId);
           currentStatus = updated.status;
-          await onComplete();
-          if (currentStatus === "PROCESSING") {
-            await new Promise((resolve) => window.setTimeout(resolve, 250));
-          }
+          setLiveRun(updated);
         }
         if (!cancelled && currentStatus !== "PROCESSING") {
+          await onComplete();
+          setLiveRun(null);
           toast({
             title: currentStatus === "COMPLETED" ? "Bulk generation completed" : "Bulk generation finished with errors",
             status: currentStatus === "COMPLETED" ? "success" : "warning",
@@ -1145,7 +1149,7 @@ function BulkGenerateTab({
         </SecondaryButton>
       </Flex>
 
-      <DataTable<PayrollRun> columns={runColumns} data={runs} keyField="id" />
+      <DataTable<PayrollRun> columns={runColumns} data={displayedRuns} keyField="id" />
       <PayslipEmailDialog
         isOpen={dispatchDisclosure.isOpen}
         onClose={() => {
