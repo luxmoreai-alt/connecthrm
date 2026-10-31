@@ -868,7 +868,7 @@ export class PayrollService {
       });
     }
 
-    const employees = await employeeQuery.getMany();
+    const employees = await employeeQuery.orderBy('u.id', 'ASC').getMany();
     if (!employees.length) {
       throw ApiError.badRequest('No active employees found for payroll generation');
     }
@@ -883,17 +883,8 @@ export class PayrollService {
       resultSummary: {
         overwriteExisting: !!input.overwriteExisting,
         startedAt: new Date().toISOString(),
+        employeeIds: employees.map((employee) => employee.id),
       },
-    });
-
-    this.processSystemBulkInBackground(
-      run.id,
-      employees.map((e) => e.id),
-      input.month,
-      input.year,
-      !!input.overwriteExisting,
-    ).catch((err) => {
-      console.error('System bulk payroll generation failed:', err);
     });
 
     return {
@@ -903,32 +894,44 @@ export class PayrollService {
     };
   }
 
-  private async processSystemBulkInBackground(
-    runId: string,
-    employeeIds: string[],
-    month: number,
-    year: number,
-    overwriteExisting: boolean,
-  ) {
-    const BATCH_SIZE = 25;
-    let successCount = 0;
-    let failedCount = 0;
-    let skippedCount = 0;
-    const errors: Array<{ employeeId?: string; employeeCode?: string; message: string }> = [];
+  async processSystemBulkChunk(runId: string) {
+    const run = await this.repo.findRunById(runId);
+    if (!run) throw ApiError.notFound('Payroll run not found');
+    if (run.runType !== PayrollRunType.SYSTEM_BULK) {
+      throw ApiError.badRequest('Only system bulk runs can be processed');
+    }
+    if (run.status !== PayrollRunStatus.PROCESSING) return run;
 
-    for (let i = 0; i < employeeIds.length; i += BATCH_SIZE) {
-      const batch = employeeIds.slice(i, i + BATCH_SIZE);
-      for (const employeeId of batch) {
-        try {
-          const computed = await this.computeEmployeePayrollData(employeeId, month, year);
-          const existing = await this.repo.findExistingRecord(employeeId, month, year);
+    const summary = (run.resultSummary || {}) as Record<string, unknown>;
+    let employeeIds = Array.isArray(summary.employeeIds)
+      ? summary.employeeIds.filter((id): id is string => typeof id === 'string')
+      : [];
+    if (!employeeIds.length) {
+      const employees = await AppDataSource.getRepository(User)
+        .createQueryBuilder('u')
+        .where('u.role = :role', { role: UserRole.EMPLOYEE })
+        .andWhere('u.isActive = true')
+        .orderBy('u.id', 'ASC')
+        .getMany();
+      employeeIds = employees.map((employee) => employee.id);
+    }
+
+    const BATCH_SIZE = 8;
+    const start = Math.max(0, run.processedCount || 0);
+    const batch = employeeIds.slice(start, start + BATCH_SIZE);
+    const overwriteExisting = summary.overwriteExisting === true;
+    const errors = [...(run.errorSummary || [])];
+
+    const results = await Promise.all(batch.map(async (employeeId) => {
+      try {
+          const computed = await this.computeEmployeePayrollData(employeeId, run.month, run.year);
+          const existing = await this.repo.findExistingRecord(employeeId, run.month, run.year);
           if (
             existing &&
             existing.status !== PayrollRecordStatus.DRAFT &&
             !overwriteExisting
           ) {
-            skippedCount++;
-            continue;
+            return { outcome: 'skipped' as const, employeeId };
           }
 
           const employeeSnapshot = {
@@ -948,8 +951,8 @@ export class PayrollService {
           const recordPayload = {
             payrollRunId: runId,
             employeeId,
-            month,
-            year,
+            month: run.month,
+            year: run.year,
             earnings: computed.earnings,
             deductions: computed.deductions,
             grossEarnings: computed.grossEarnings,
@@ -973,23 +976,33 @@ export class PayrollService {
             : await this.repo.createRecord(recordPayload);
 
           await this.generateAndAttachPdf(saved, employeeSnapshot);
-          successCount++;
+          return { outcome: 'success' as const, employeeId };
         } catch (err: any) {
-          failedCount++;
-          errors.push({
+          return {
+            outcome: 'failed' as const,
             employeeId,
             message: err?.message || 'Unknown payroll generation error',
-          });
+          };
         }
-      }
+    }));
 
+    const successCount = run.successCount + results.filter((result) => result.outcome === 'success').length;
+    const failedResults = results.filter((result) => result.outcome === 'failed');
+    const failedCount = run.failedCount + failedResults.length;
+    const skippedCount = run.skippedCount + results.filter((result) => result.outcome === 'skipped').length;
+    errors.push(...failedResults.map((result) => ({ employeeId: result.employeeId, message: result.message! })));
+    const processedCount = Math.min(start + batch.length, employeeIds.length);
+
+    if (processedCount < employeeIds.length) {
       await this.repo.updateRun(runId, {
-        processedCount: Math.min(i + BATCH_SIZE, employeeIds.length),
+        processedCount,
         successCount,
         failedCount,
         skippedCount,
         errorSummary: errors,
+        resultSummary: { ...summary, employeeIds },
       } as any);
+      return this.repo.findRunById(runId);
     }
 
     const finalStatus =
@@ -1001,18 +1014,21 @@ export class PayrollService {
 
     await this.repo.updateRun(runId, {
       status: finalStatus,
-      processedCount: employeeIds.length,
+      processedCount,
       totalEmployees: employeeIds.length,
       successCount,
       failedCount,
       skippedCount,
       errorSummary: errors,
       resultSummary: {
-        overwriteExisting,
+        ...summary,
+        employeeIds,
         completedAt: new Date().toISOString(),
       },
       completedAt: new Date(),
     } as any);
+
+    return this.repo.findRunById(runId);
   }
 
   async dispatchRun(

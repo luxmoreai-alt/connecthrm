@@ -125,9 +125,14 @@ export class PayrollController {
     }
     const result = await payrollService.startSystemBulkGenerate({
       ...parsed.data,
-      adminId: (req as any).user?.id,
+      adminId: req.user?.userId,
     });
     ApiResponse.success(res, 'Bulk payroll generation started', result, 202);
+  }
+
+  static async processBulkGenerate(req: Request, res: Response): Promise<void> {
+    const result = await payrollService.processSystemBulkChunk(req.params.id as string);
+    ApiResponse.success(res, 'Bulk payroll batch processed', result);
   }
 
   static async dispatchRun(req: Request, res: Response): Promise<void> {

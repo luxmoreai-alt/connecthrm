@@ -192,6 +192,9 @@ export const payrollApi = {
     overwriteExisting?: boolean;
   }) => api.post<BulkGenerateResponse>(`${BASE}/runs/system-generate`, data),
 
+  processBulkRun: (runId: string) =>
+    api.post<PayrollRun>(`${BASE}/runs/${runId}/process`),
+
   dispatchRun: (
     runId: string,
     data: {

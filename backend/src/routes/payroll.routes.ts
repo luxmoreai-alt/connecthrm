@@ -53,6 +53,7 @@ router.get('/summary', roleMiddleware('ADMIN'), asyncHandler(PayrollController.s
 router.get('/runs', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRuns));
 router.get('/runs/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.runDetail));
 router.post('/runs/system-generate', roleMiddleware('ADMIN'), asyncHandler(PayrollController.bulkGenerate));
+router.post('/runs/:id/process', roleMiddleware('ADMIN'), asyncHandler(PayrollController.processBulkGenerate));
 router.post('/runs/:id/dispatch', roleMiddleware('ADMIN'), asyncHandler(PayrollController.dispatchRun));
 router.get('/records', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRecords));
 router.delete('/records', roleMiddleware('ADMIN'), asyncHandler(PayrollController.deleteRecordsByPeriod));

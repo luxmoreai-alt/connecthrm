@@ -25,7 +25,7 @@ export class PayrollRepository {
   }
 
   async findRunById(id: string): Promise<PayrollRun | null> {
-    return this.runRepo.findOne({ where: { id }, relations: ['records'] });
+    return this.runRepo.findOne({ where: { id } });
   }
 
   async findRuns(filters?: {

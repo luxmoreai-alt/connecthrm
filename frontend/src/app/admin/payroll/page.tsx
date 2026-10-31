@@ -897,7 +897,7 @@ function BulkGenerateTab({
   month: number;
   year: number;
   runs: PayrollRun[];
-  onComplete: () => void;
+  onComplete: () => Promise<void>;
 }) {
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [running, setRunning] = useState(false);
@@ -905,8 +905,63 @@ function BulkGenerateTab({
   const [dispatchTarget, setDispatchTarget] = useState<PayrollRun | null>(null);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
+  const [resumeVersion, setResumeVersion] = useState(0);
   const dispatchDisclosure = useDisclosure();
   const toast = useToast();
+  const processingRun = runs.find((run) => run.status === "PROCESSING" && run.runType === "SYSTEM_BULK");
+  const processingRef = useRef<string | null>(null);
+
+  const refreshRuns = useCallback(async () => {
+    await onComplete();
+    if (!processingRef.current) setResumeVersion((version) => version + 1);
+  }, [onComplete]);
+
+  useEffect(() => {
+    const runId = processingRun?.id;
+    if (!runId || processingRef.current === runId) return;
+
+    let cancelled = false;
+    processingRef.current = runId;
+
+    const processRun = async () => {
+      try {
+        let currentStatus = "PROCESSING";
+        while (!cancelled && currentStatus === "PROCESSING") {
+          const updated = await payrollApi.processBulkRun(runId);
+          currentStatus = updated.status;
+          await onComplete();
+          if (currentStatus === "PROCESSING") {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
+        }
+        if (!cancelled && currentStatus !== "PROCESSING") {
+          toast({
+            title: currentStatus === "COMPLETED" ? "Bulk generation completed" : "Bulk generation finished with errors",
+            status: currentStatus === "COMPLETED" ? "success" : "warning",
+            duration: 3500,
+            isClosable: true,
+          });
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          toast({
+            title: "Bulk generation paused",
+            description: error?.message || "Use Refresh Runs to resume processing.",
+            status: "error",
+            duration: 4000,
+            isClosable: true,
+          });
+        }
+      } finally {
+        if (processingRef.current === runId) processingRef.current = null;
+      }
+    };
+
+    void processRun();
+    return () => {
+      cancelled = true;
+    };
+  }, [processingRun?.id, onComplete, resumeVersion, toast]);
 
   const openDispatchDialog = (run: PayrollRun) => {
     const period = `${MONTHS[run.month - 1]} ${run.year}`;
@@ -983,12 +1038,20 @@ function BulkGenerateTab({
         key: "metrics",
         header: "Result",
         render: (row) => (
-          <Text fontSize="sm" color="text.body">
-            {row.successCount}/{row.totalEmployees} success{" "}
-            <Text as="span" color="text.muted">
-              ({row.failedCount || 0} failed, {row.skippedCount || 0} skipped)
+          <Box minW="220px">
+            <Text fontSize="sm" color="text.body">
+              {row.successCount}/{row.totalEmployees} success{" "}
+              <Text as="span" color="text.muted">
+                ({row.failedCount || 0} failed, {row.skippedCount || 0} skipped)
+              </Text>
             </Text>
-          </Text>
+            {row.status === "PROCESSING" && (
+              <>
+                <Progress mt={1.5} size="xs" borderRadius="full" colorScheme="blue" value={row.totalEmployees ? ((row.processedCount || 0) / row.totalEmployees) * 100 : 0} />
+                <Text mt={1} fontSize="10px" color="text.muted">{row.processedCount || 0}/{row.totalEmployees} processed</Text>
+              </>
+            )}
+          </Box>
         ),
       },
       {
@@ -1008,7 +1071,7 @@ function BulkGenerateTab({
           <Flex gap={2}>
             <SecondaryButton
               size="xs"
-              onClick={onComplete}
+              onClick={() => void refreshRuns()}
               leftIcon={<Search size={12} />}
             >
               Refresh
@@ -1017,6 +1080,7 @@ function BulkGenerateTab({
               size="xs"
               leftIcon={<Mail size={12} />}
               isLoading={dispatchingRunId === row.id}
+              isDisabled={row.status === "PROCESSING"}
               onClick={() => openDispatchDialog(row)}
             >
               Send
@@ -1025,7 +1089,7 @@ function BulkGenerateTab({
         ),
       },
     ],
-    [dispatchingRunId, onComplete, toast],
+    [dispatchingRunId, refreshRuns, toast],
   );
 
   const startBulkGenerate = async () => {
@@ -1072,10 +1136,11 @@ function BulkGenerateTab({
           leftIcon={<TrendingUp size={14} />}
           onClick={startBulkGenerate}
           isLoading={running}
+          isDisabled={Boolean(processingRun)}
         >
           Start Bulk Generation
         </PrimaryButton>
-        <SecondaryButton leftIcon={<Search size={14} />} onClick={onComplete}>
+        <SecondaryButton leftIcon={<Search size={14} />} onClick={() => void refreshRuns()}>
           Refresh Runs
         </SecondaryButton>
       </Flex>
