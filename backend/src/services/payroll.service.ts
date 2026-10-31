@@ -343,7 +343,7 @@ export class PayrollService {
     const attendance = await this.computeAttendance(user.id, month, year, profile?.dateOfJoining);
 
     // Smart merge: Excel fields override system, missing fields fallback to system
-    const prorationFactor = this.getPayableDayProrationFactor(attendance);
+    const prorationFactor = this.getThirtyDayProrationFactor(attendance);
     const earnings = row.earnings.length > 0
       ? this.mergeEarnings(row.earnings, salary, salaryStructure)
       : this.prorateComponents(
@@ -1223,7 +1223,7 @@ export class PayrollService {
       profile?.dateOfJoining,
     );
 
-    const prorationFactor = this.getPayableDayProrationFactor(attendance);
+    const prorationFactor = this.getThirtyDayProrationFactor(attendance);
     const earnings = this.prorateComponents(
       this.mergeEarnings([], salary, salaryStructure),
       prorationFactor,
@@ -1780,6 +1780,7 @@ export class PayrollService {
         return {
           employeeCode: String(snapshot.employeeCode || ''),
           employeeName: String(snapshot.employeeName || ''),
+          dateOfJoining: String(snapshot.dateOfJoining || ''),
           department: String(snapshot.department || ''),
           grossEarnings: Number(record.grossEarnings) || 0,
           totalDeductions: Number(record.totalDeductions) || 0,
@@ -1794,13 +1795,11 @@ export class PayrollService {
   }
 
   /**
-   * Salary structures contain full-month values. Pay every component in
-   * proportion to actual payable days so joining dates, absences, half-days,
-   * and LOP all reduce salary consistently.
+   * The organization uses a fixed 30-day salary basis regardless of the
+   * number of working days in the payroll month.
    */
-  private getPayableDayProrationFactor(attendance: AttendanceComputation): number {
-    if (attendance.workingDays <= 0) return 0;
-    return Math.min(1, Math.max(0, attendance.payableDays / attendance.workingDays));
+  private getThirtyDayProrationFactor(attendance: AttendanceComputation): number {
+    return Math.min(1, Math.max(0, attendance.payableDays / 30));
   }
 
   private prorateComponents(

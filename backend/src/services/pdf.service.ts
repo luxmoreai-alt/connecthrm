@@ -42,6 +42,7 @@ export interface PayslipData {
 export interface PayrollRegisterRow {
   employeeCode: string;
   employeeName: string;
+  dateOfJoining: string;
   department: string;
   grossEarnings: number;
   totalDeductions: number;
@@ -132,6 +133,12 @@ async function resolveLogo(custom?: string): Promise<string | Buffer | undefined
 function safe(value: unknown): string {
   const text = String(value || '').trim();
   return text || '-';
+}
+
+function displayDate(value: unknown): string {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : safe(raw);
 }
 
 export async function generatePayslipPdf(
@@ -301,13 +308,14 @@ export function generatePayrollRegisterPdf(
     const left = 32;
     const tableWidth = doc.page.width - 64;
     const columns = [
-      { label: 'Employee ID', width: 92, align: 'left' as const },
-      { label: 'Employee Name', width: 150, align: 'left' as const },
-      { label: 'Department', width: 130, align: 'left' as const },
-      { label: 'Gross Salary', width: 100, align: 'right' as const },
-      { label: 'Deductions', width: 95, align: 'right' as const },
-      { label: 'Net Salary', width: 105, align: 'right' as const },
-      { label: 'Status', width: tableWidth - 672, align: 'left' as const },
+      { label: 'Employee ID', width: 82, align: 'left' as const },
+      { label: 'Employee Name', width: 135, align: 'left' as const },
+      { label: 'Date of Joining', width: 75, align: 'left' as const },
+      { label: 'Department', width: 115, align: 'left' as const },
+      { label: 'Gross Salary', width: 90, align: 'right' as const },
+      { label: 'Deductions', width: 90, align: 'right' as const },
+      { label: 'Net Salary', width: 95, align: 'right' as const },
+      { label: 'Status', width: tableWidth - 682, align: 'left' as const },
     ];
     const rowHeight = 24;
 
@@ -339,6 +347,7 @@ export function generatePayrollRegisterPdf(
       const values = [
         row.employeeCode,
         row.employeeName,
+        displayDate(row.dateOfJoining),
         row.department,
         money(row.grossEarnings),
         money(row.totalDeductions),
@@ -350,8 +359,8 @@ export function generatePayrollRegisterPdf(
         const column = columns[columnIndex];
         doc.rect(x, y, column.width, rowHeight)
           .fillAndStroke(index % 2 === 0 ? COLORS.pale : COLORS.white, COLORS.border);
-        doc.fillColor(columnIndex === 5 ? COLORS.green : COLORS.ink)
-          .font(columnIndex === 1 || columnIndex === 5 ? 'Helvetica-Bold' : 'Helvetica')
+        doc.fillColor(columnIndex === 6 ? COLORS.green : COLORS.ink)
+          .font(columnIndex === 1 || columnIndex === 6 ? 'Helvetica-Bold' : 'Helvetica')
           .fontSize(7.5)
           .text(safe(values[columnIndex]), x + 6, y + 8, {
             width: column.width - 12,
