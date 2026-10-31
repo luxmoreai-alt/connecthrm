@@ -1796,9 +1796,16 @@ export class PayrollService {
 
   /**
    * The organization uses a fixed 30-day salary basis regardless of the
-   * number of working days in the payroll month.
+   * number of working days in the payroll month. Employees who were eligible
+   * for the whole month and completed every eligible working day receive the
+   * full monthly salary because weekly offs and holidays are paid days.
    */
   private getThirtyDayProrationFactor(attendance: AttendanceComputation): number {
+    const isFullMonthEligible = attendance.eligibleWorkingDays >= attendance.workingDays;
+    const completedAllEligibleDays = attendance.payableDays >= attendance.eligibleWorkingDays;
+    if (attendance.workingDays > 0 && isFullMonthEligible && completedAllEligibleDays) {
+      return 1;
+    }
     return Math.min(1, Math.max(0, attendance.payableDays / 30));
   }
 
