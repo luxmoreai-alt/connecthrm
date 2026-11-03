@@ -1875,6 +1875,17 @@ export class PayrollService {
     if (attendance.workingDays > 0 && isFullMonthEligible && completedAllEligibleDays) {
       return 1;
     }
+
+    // Paid weekly offs and holidays are part of the fixed 30-day salary. For
+    // a full-month employee, reduce salary only by actual LOP days instead of
+    // treating the number of payable working days as calendar salary days.
+    // Example: 20 working days with 1 LOP is 29/30 salary, not 19/30.
+    if (attendance.workingDays > 0 && isFullMonthEligible) {
+      return Math.min(1, Math.max(0, (30 - attendance.lopDays) / 30));
+    }
+
+    // Preserve the existing eligibility proration for employees who joined
+    // after the payroll month began and were not eligible for the full month.
     return Math.min(1, Math.max(0, attendance.payableDays / 30));
   }
 
