@@ -16,7 +16,12 @@ import { PayrollRecord, PayrollRecordStatus, PayrollSource, PayrollComponent } f
 import { PayrollRunStatus, PayrollRunType } from '../entities/PayrollRun.entity';
 import { ImportJobStatus } from '../entities/PayrollImportJob.entity';
 import { PayrollRepository } from '../repositories/payroll.repository';
-import { generatePayrollRegisterPdf, generatePayslipPdf, PayslipData } from './pdf.service';
+import {
+  generateBankSalaryStatementPdf,
+  generatePayrollRegisterPdf,
+  generatePayslipPdf,
+  PayslipData,
+} from './pdf.service';
 import { parsePayrollExcel, ParsedRow } from './excel.service';
 import { OrgSettings, AlternateSaturdayRule } from '../entities/OrgSettings.entity';
 import { Holiday } from '../entities/Holiday.entity';
@@ -540,6 +545,7 @@ export class PayrollService {
     }
 
     const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+    const currentBankAccounts = await this.getCurrentBankAccounts([record]);
     let companyName = 'Connect HR';
     let companyAddress = '';
     let companyLogo: string | undefined;
@@ -570,7 +576,7 @@ export class PayrollService {
       designation: String(snapshot.designation || ''),
       department: String(snapshot.department || ''),
       dateOfJoining: String(snapshot.dateOfJoining || ''),
-      bankAccount: String(snapshot.bankAccount || ''),
+      bankAccount: currentBankAccounts.get(record.employeeId) || String(snapshot.bankAccount || ''),
       uan: String(snapshot.uan || ''),
       pfNo: String(snapshot.pfNo || ''),
       esiNo: String(snapshot.esiNo || ''),
@@ -1766,6 +1772,7 @@ export class PayrollService {
     year: number,
   ): Promise<{ fileName: string; buffer: Buffer }> {
     const records = await this.repo.findRecords({ month, year });
+    const currentBankAccounts = await this.getCurrentBankAccounts(records);
     let companyName = 'Connect HR';
     try {
       const org = await AppDataSource.getRepository(OrgSettings).findOne({ where: {} });
@@ -1782,6 +1789,7 @@ export class PayrollService {
           employeeName: String(snapshot.employeeName || ''),
           dateOfJoining: String(snapshot.dateOfJoining || ''),
           department: String(snapshot.department || ''),
+          bankAccount: currentBankAccounts.get(record.employeeId) || '',
           grossEarnings: Number(record.grossEarnings) || 0,
           totalDeductions: Number(record.totalDeductions) || 0,
           netPay: Number(record.netPay) || 0,
@@ -1792,6 +1800,67 @@ export class PayrollService {
       year,
       companyName,
     );
+  }
+
+  async exportBankSalaryStatement(
+    month: number,
+    year: number,
+  ): Promise<{ fileName: string; buffer: Buffer }> {
+    const records = await this.repo.findRecords({ month, year });
+    const currentBankAccounts = await this.getCurrentBankAccounts(records);
+    let companyName = 'Connect HR';
+    try {
+      const org = await AppDataSource.getRepository(OrgSettings).findOne({ where: {} });
+      if (org?.companyName) companyName = org.companyName;
+    } catch {
+      // Use the product name when organization branding is unavailable.
+    }
+
+    return generateBankSalaryStatementPdf(
+      records.map((record) => {
+        const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+        return {
+          employeeName: String(snapshot.employeeName || ''),
+          bankAccount: currentBankAccounts.get(record.employeeId) || '',
+          netPay: Number(record.netPay) || 0,
+        };
+      }),
+      month,
+      year,
+      companyName,
+    );
+  }
+
+  private async getCurrentBankAccounts(records: PayrollRecord[]): Promise<Map<string, string>> {
+    const employeeIds = [...new Set(records.map((record) => record.employeeId).filter(Boolean))];
+    const result = new Map<string, string>();
+    if (!employeeIds.length) return result;
+
+    const [structures, legacySalaries] = await Promise.all([
+      AppDataSource.getRepository(EmployeeSalaryStructure)
+        .createQueryBuilder('structure')
+        .where('structure.employeeId IN (:...employeeIds)', { employeeIds })
+        .orderBy('structure.effectiveFrom', 'DESC')
+        .addOrderBy('structure.createdAt', 'DESC')
+        .getMany(),
+      AppDataSource.getRepository(SalaryDetails)
+        .createQueryBuilder('salary')
+        .where('salary.userId IN (:...employeeIds)', { employeeIds })
+        .getMany(),
+    ]);
+
+    for (const salary of legacySalaries) {
+      if (salary.accountNumber) result.set(salary.userId, salary.accountNumber);
+    }
+    const resolvedStructures = new Set<string>();
+    for (const structure of structures) {
+      if (resolvedStructures.has(structure.employeeId)) continue;
+      const banking = (structure.bankingInfo || {}) as Record<string, unknown>;
+      const accountNumber = String(banking.accountNumber || '').trim();
+      if (accountNumber) result.set(structure.employeeId, accountNumber);
+      resolvedStructures.add(structure.employeeId);
+    }
+    return result;
   }
 
   /**

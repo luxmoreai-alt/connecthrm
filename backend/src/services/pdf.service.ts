@@ -44,10 +44,17 @@ export interface PayrollRegisterRow {
   employeeName: string;
   dateOfJoining: string;
   department: string;
+  bankAccount: string;
   grossEarnings: number;
   totalDeductions: number;
   netPay: number;
   status: string;
+}
+
+export interface BankSalaryStatementRow {
+  employeeName: string;
+  bankAccount: string;
+  netPay: number;
 }
 
 const MONTH_NAMES = [
@@ -308,14 +315,15 @@ export function generatePayrollRegisterPdf(
     const left = 32;
     const tableWidth = doc.page.width - 64;
     const columns = [
-      { label: 'Employee ID', width: 82, align: 'left' as const },
-      { label: 'Employee Name', width: 135, align: 'left' as const },
-      { label: 'Date of Joining', width: 75, align: 'left' as const },
-      { label: 'Department', width: 115, align: 'left' as const },
-      { label: 'Gross Salary', width: 90, align: 'right' as const },
-      { label: 'Deductions', width: 90, align: 'right' as const },
-      { label: 'Net Salary', width: 95, align: 'right' as const },
-      { label: 'Status', width: tableWidth - 682, align: 'left' as const },
+      { label: 'Employee ID', width: 68, align: 'left' as const },
+      { label: 'Employee Name', width: 120, align: 'left' as const },
+      { label: 'Date of Joining', width: 68, align: 'left' as const },
+      { label: 'Department', width: 95, align: 'left' as const },
+      { label: 'Account Number', width: 120, align: 'left' as const },
+      { label: 'Gross Salary', width: 75, align: 'right' as const },
+      { label: 'Deductions', width: 75, align: 'right' as const },
+      { label: 'Net Salary', width: 80, align: 'right' as const },
+      { label: 'Status', width: tableWidth - 701, align: 'left' as const },
     ];
     const rowHeight = 24;
 
@@ -349,6 +357,7 @@ export function generatePayrollRegisterPdf(
         row.employeeName,
         displayDate(row.dateOfJoining),
         row.department,
+        row.bankAccount,
         money(row.grossEarnings),
         money(row.totalDeductions),
         money(row.netPay),
@@ -359,8 +368,8 @@ export function generatePayrollRegisterPdf(
         const column = columns[columnIndex];
         doc.rect(x, y, column.width, rowHeight)
           .fillAndStroke(index % 2 === 0 ? COLORS.pale : COLORS.white, COLORS.border);
-        doc.fillColor(columnIndex === 6 ? COLORS.green : COLORS.ink)
-          .font(columnIndex === 1 || columnIndex === 6 ? 'Helvetica-Bold' : 'Helvetica')
+        doc.fillColor(columnIndex === 7 ? COLORS.green : COLORS.ink)
+          .font(columnIndex === 1 || columnIndex === 7 ? 'Helvetica-Bold' : 'Helvetica')
           .fontSize(7.5)
           .text(safe(values[columnIndex]), x + 6, y + 8, {
             width: column.width - 12,
@@ -382,6 +391,102 @@ export function generatePayrollRegisterPdf(
     doc.fillColor(COLORS.green).font('Helvetica-Bold').fontSize(10)
       .text(`TOTAL EMPLOYEES: ${rows.length}`, left + 10, y + 18, { width: tableWidth / 2 });
     doc.text(`TOTAL NET SALARY: ${money(totalNetPay)}`, left + tableWidth / 2, y + 18, {
+      width: tableWidth / 2 - 10,
+      align: 'right',
+    });
+    doc.end();
+  });
+}
+
+export function generateBankSalaryStatementPdf(
+  rows: BankSalaryStatementRow[],
+  month: number,
+  year: number,
+  companyName: string,
+): Promise<{ buffer: Buffer; fileName: string }> {
+  const fileName = `bank_salary_statement_${year}_${String(month).padStart(2, '0')}.pdf`;
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 32,
+      info: { Title: fileName, Author: companyName },
+    });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('error', reject);
+    doc.on('end', () => resolve({ buffer: Buffer.concat(chunks), fileName }));
+
+    const left = 32;
+    const tableWidth = doc.page.width - 64;
+    const columns = [
+      { label: 'S. No.', width: 38, align: 'center' as const },
+      { label: 'Employee Name', width: 195, align: 'left' as const },
+      { label: 'Account Number', width: 165, align: 'left' as const },
+      { label: 'Net Pay', width: tableWidth - 398, align: 'right' as const },
+    ];
+    const rowHeight = 26;
+
+    const drawHeader = () => {
+      doc.fillColor(COLORS.navy).font('Helvetica-Bold').fontSize(17)
+        .text(companyName || 'Connect HR', left, 30, { width: tableWidth });
+      doc.fillColor(COLORS.ink).fontSize(13)
+        .text(`Bank Salary Statement - ${MONTH_NAMES[month - 1]} ${year}`, left, 57, { width: tableWidth });
+      doc.fillColor(COLORS.muted).font('Helvetica').fontSize(8)
+        .text(`Generated ${new Date().toLocaleString('en-IN')}`, left, 78, { width: tableWidth });
+
+      let x = left;
+      const y = 100;
+      for (const column of columns) {
+        doc.rect(x, y, column.width, 28).fillAndStroke(COLORS.navy, COLORS.border);
+        doc.fillColor(COLORS.white).font('Helvetica-Bold').fontSize(8)
+          .text(column.label.toUpperCase(), x + 6, y + 10, {
+            width: column.width - 12,
+            align: column.align,
+          });
+        x += column.width;
+      }
+      return y + 28;
+    };
+
+    let y = drawHeader();
+    rows.forEach((row, index) => {
+      if (y + rowHeight > doc.page.height - 58) {
+        doc.addPage();
+        y = drawHeader();
+      }
+      const values = [
+        String(index + 1),
+        row.employeeName,
+        row.bankAccount || 'NOT PROVIDED',
+        money(row.netPay),
+      ];
+      let x = left;
+      columns.forEach((column, columnIndex) => {
+        doc.rect(x, y, column.width, rowHeight)
+          .fillAndStroke(index % 2 === 0 ? COLORS.pale : COLORS.white, COLORS.border);
+        doc.fillColor(columnIndex === 3 ? COLORS.green : COLORS.ink)
+          .font(columnIndex === 1 || columnIndex === 3 ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(8.5)
+          .text(safe(values[columnIndex]), x + 6, y + 9, {
+            width: column.width - 12,
+            align: column.align,
+            ellipsis: true,
+            lineBreak: false,
+          });
+        x += column.width;
+      });
+      y += rowHeight;
+    });
+
+    const totalNetPay = rows.reduce((sum, row) => sum + row.netPay, 0);
+    if (y + 40 > doc.page.height - 32) {
+      doc.addPage();
+      y = drawHeader();
+    }
+    doc.rect(left, y + 8, tableWidth, 32).fillAndStroke('#EAF7F2', '#A9D8C5');
+    doc.fillColor(COLORS.green).font('Helvetica-Bold').fontSize(10)
+      .text(`TOTAL EMPLOYEES: ${rows.length}`, left + 10, y + 19, { width: tableWidth / 2 });
+    doc.text(`TOTAL SALARY: ${money(totalNetPay)}`, left + tableWidth / 2, y + 19, {
       width: tableWidth / 2 - 10,
       align: 'right',
     });

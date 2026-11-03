@@ -267,6 +267,20 @@ export class PayrollController {
     res.send(result.buffer);
   }
 
+  static async bankSalaryStatement(req: Request, res: Response): Promise<void> {
+    const parsed = salaryReportSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const result = await payrollService.exportBankSalaryStatement(parsed.data.month, parsed.data.year);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    res.send(result.buffer);
+  }
+
   // ─── Admin/Employee: Download payslip PDF ───
   static async downloadPayslip(req: Request, res: Response): Promise<void> {
     const pdf = await payrollService.getPayslipPdf(req.params.id as string);

@@ -132,7 +132,7 @@ export default function PayrollPage() {
   const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | "bank" | null>(null);
   const deleteDisclosure = useDisclosure();
   const deleteAllDisclosure = useDisclosure();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
@@ -360,6 +360,17 @@ export default function PayrollPage() {
     }
   };
 
+  const handleBankExport = async () => {
+    setExporting("bank");
+    try {
+      await payrollApi.downloadBankSalaryStatement({ month, year });
+    } catch (err: any) {
+      toast({ title: "Bank PDF export failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Box>
       <PageHeader title="Payroll" subtitle="Manage payslips and salary processing" />
@@ -441,6 +452,15 @@ export default function PayrollPage() {
                       onClick={() => { void handleExport("pdf"); }}
                     >
                       Export PDF
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<Download size={15} />}
+                      isLoading={exporting === "bank"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleBankExport(); }}
+                    >
+                      Bank PDF
                     </SecondaryButton>
                     <SecondaryButton
                       size="sm"

@@ -8,6 +8,8 @@ import {
   employeeBankingDetailsSchema,
 } from '../validators/employeeSalaryStructure.validator';
 import { NotificationService } from '../services/notification.service';
+import { AppDataSource } from '../config/database';
+import { User } from '../entities/User.entity';
 
 const service = new EmployeeSalaryStructureService();
 const notificationService = new NotificationService();
@@ -26,11 +28,22 @@ export class EmployeeSalaryStructureController {
         'VALIDATION_ERROR',
       );
     }
-    const result = await service.saveBankingDetails(req.user!.userId, parsed.data);
+    const userId = req.user!.userId;
+    const result = await service.saveBankingDetails(userId, parsed.data);
+    const employee = await AppDataSource.getRepository(User).findOne({
+      where: { id: userId },
+      select: ['firstName', 'lastName', 'empId'],
+    });
+    const employeeName = employee
+      ? `${employee.firstName} ${employee.lastName}`.trim()
+      : 'An employee';
+    const employeeLabel = employee?.empId
+      ? `${employeeName} (${employee.empId})`
+      : employeeName;
     await notificationService.notifyAdmins(
       'BANKING_DETAILS_UPDATED',
-      'Employee banking details submitted',
-      'An employee submitted or updated their salary banking information.',
+      `${employeeName} updated banking details`,
+      `${employeeLabel} submitted or updated their salary banking information.`,
       '/admin/employees/salary',
     ).catch((err) => console.error('Failed to notify admins about banking details', err.message));
     ApiResponse.success(res, 'Banking details saved successfully', result);
