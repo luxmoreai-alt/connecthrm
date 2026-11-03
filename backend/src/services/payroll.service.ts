@@ -40,6 +40,7 @@ import { NotificationService } from './notification.service';
 interface AttendanceComputation {
   workingDays: number;
   eligibleWorkingDays: number;
+  salaryEligibleDays: number;
   payableDays: number;
   presentDays: number;
   leaveDays: number;
@@ -1444,14 +1445,14 @@ export class PayrollService {
     }
 
     let eligibleStartDay = 1;
+    let salaryEligibleDays = 30;
     if (dateOfJoining) {
-      const joiningDate = new Date(dateOfJoining);
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month - 1, lastDay);
-      if (joiningDate > monthEnd) {
+      const joiningDate = String(dateOfJoining).slice(0, 10);
+      if (joiningDate > endDate) {
         return {
           workingDays,
           eligibleWorkingDays: 0,
+          salaryEligibleDays: 0,
           payableDays: 0,
           presentDays: 0,
           leaveDays: 0,
@@ -1466,7 +1467,13 @@ export class PayrollService {
           regularizationCount: 0,
         };
       }
-      if (joiningDate > monthStart) eligibleStartDay = joiningDate.getDate();
+      if (joiningDate > startDate) {
+        eligibleStartDay = Number(joiningDate.slice(8, 10));
+        // Salary uses a fixed divisor of 30, but an employee joining during
+        // the month is eligible only for the calendar days they were
+        // employed. Cap 31-day months at 30 salary days.
+        salaryEligibleDays = Math.min(30, lastDay - eligibleStartDay + 1);
+      }
     }
 
     let eligibleWorkingDays = 0;
@@ -1602,6 +1609,7 @@ export class PayrollService {
     return {
       workingDays,
       eligibleWorkingDays,
+      salaryEligibleDays,
       payableDays,
       presentDays: round2(presentDays),
       leaveDays: round2(leaveDays),
@@ -1870,23 +1878,13 @@ export class PayrollService {
    * full monthly salary because weekly offs and holidays are paid days.
    */
   private getThirtyDayProrationFactor(attendance: AttendanceComputation): number {
-    const isFullMonthEligible = attendance.eligibleWorkingDays >= attendance.workingDays;
-    const completedAllEligibleDays = attendance.payableDays >= attendance.eligibleWorkingDays;
-    if (attendance.workingDays > 0 && isFullMonthEligible && completedAllEligibleDays) {
-      return 1;
-    }
-
-    // Paid weekly offs and holidays are part of the fixed 30-day salary. For
-    // a full-month employee, reduce salary only by actual LOP days instead of
-    // treating the number of payable working days as calendar salary days.
-    // Example: 20 working days with 1 LOP is 29/30 salary, not 19/30.
-    if (attendance.workingDays > 0 && isFullMonthEligible) {
-      return Math.min(1, Math.max(0, (30 - attendance.lopDays) / 30));
-    }
-
-    // Preserve the existing eligibility proration for employees who joined
-    // after the payroll month began and were not eligible for the full month.
-    return Math.min(1, Math.max(0, attendance.payableDays / 30));
+    // Weekly offs, holidays, and paid leave remain paid. Start with the
+    // calendar days for which the employee was eligible based on joining date,
+    // then reduce only actual LOP days. Examples: a full-month employee with
+    // 1 LOP receives 29/30; an employee joining on the 22nd of a 31-day month
+    // receives 10/30 before any LOP deduction.
+    const payableSalaryDays = attendance.salaryEligibleDays - attendance.lopDays;
+    return Math.min(1, Math.max(0, payableSalaryDays / 30));
   }
 
   private prorateComponents(
