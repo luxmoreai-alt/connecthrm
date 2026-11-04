@@ -266,6 +266,12 @@ export const payrollApi = {
       `${params.bankGroup === "INDUSIND" ? "indusind_bank" : "other_banks"}_salary_statement_${params.year}_${String(params.month).padStart(2, "0")}.pdf`,
     ),
 
+  downloadBankSalaryExcel: (params: { month: number; year: number; bankGroup: "INDUSIND" | "OTHER" }) =>
+    api.downloadBlob(
+      `${BASE}/reports/salary/bank-excel/${params.bankGroup}?month=${params.month}&year=${params.year}`,
+      `${params.bankGroup === "INDUSIND" ? "indusind_bank" : "other_banks"}_salary_statement_${params.year}_${String(params.month).padStart(2, "0")}.xlsx`,
+    ),
+
   downloadPayslipUrl: (id: string) =>
     `${API_BASE}${BASE}/records/${id}/download`,
 

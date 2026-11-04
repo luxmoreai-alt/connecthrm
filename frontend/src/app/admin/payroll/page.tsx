@@ -132,7 +132,7 @@ export default function PayrollPage() {
   const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-  const [exporting, setExporting] = useState<"excel" | "pdf" | "indusind" | "otherBanks" | null>(null);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | "indusind" | "otherBanks" | "indusindExcel" | "otherBanksExcel" | null>(null);
   const deleteDisclosure = useDisclosure();
   const deleteAllDisclosure = useDisclosure();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
@@ -371,6 +371,17 @@ export default function PayrollPage() {
     }
   };
 
+  const handleBankExcelExport = async (bankGroup: "INDUSIND" | "OTHER") => {
+    setExporting(bankGroup === "INDUSIND" ? "indusindExcel" : "otherBanksExcel");
+    try {
+      await payrollApi.downloadBankSalaryExcel({ month, year, bankGroup });
+    } catch (err: any) {
+      toast({ title: "Bank Excel export failed", description: err.message, status: "error", duration: 3500, isClosable: true });
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <Box>
       <PageHeader title="Payroll" subtitle="Manage payslips and salary processing" />
@@ -470,6 +481,24 @@ export default function PayrollPage() {
                       onClick={() => { void handleBankExport("OTHER"); }}
                     >
                       Other Banks PDF
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<FileSpreadsheet size={15} />}
+                      isLoading={exporting === "indusindExcel"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleBankExcelExport("INDUSIND"); }}
+                    >
+                      IndusInd Excel
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<FileSpreadsheet size={15} />}
+                      isLoading={exporting === "otherBanksExcel"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleBankExcelExport("OTHER"); }}
+                    >
+                      Other Banks Excel
                     </SecondaryButton>
                     <SecondaryButton
                       size="sm"

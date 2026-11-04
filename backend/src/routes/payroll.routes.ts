@@ -51,6 +51,7 @@ router.get('/reports/salary', roleMiddleware('ADMIN'), asyncHandler(PayrollContr
 router.get('/reports/salary/pdf', roleMiddleware('ADMIN'), asyncHandler(PayrollController.salaryPdfReport));
 router.get('/reports/salary/bank-pdf', roleMiddleware('ADMIN'), asyncHandler(PayrollController.bankSalaryStatement));
 router.get('/reports/salary/bank-pdf/:bankGroup', roleMiddleware('ADMIN'), asyncHandler(PayrollController.bankSalaryStatement));
+router.get('/reports/salary/bank-excel/:bankGroup', roleMiddleware('ADMIN'), asyncHandler(PayrollController.bankSalaryExcel));
 router.get('/summary', roleMiddleware('ADMIN'), asyncHandler(PayrollController.summary));
 router.get('/runs', roleMiddleware('ADMIN'), asyncHandler(PayrollController.listRuns));
 router.get('/runs/:id', roleMiddleware('ADMIN'), asyncHandler(PayrollController.runDetail));

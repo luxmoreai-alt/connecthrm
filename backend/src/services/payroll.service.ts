@@ -80,6 +80,14 @@ interface CurrentBankingDetails {
   ifscCode: string;
 }
 
+interface BankSalaryExportRow {
+  employeeName: string;
+  bankName: string;
+  bankAccount: string;
+  ifscCode: string;
+  netPay: number;
+}
+
 export class PayrollService {
   private repo: PayrollRepository;
 
@@ -1824,7 +1832,7 @@ export class PayrollService {
     bankGroup?: 'INDUSIND' | 'OTHER',
   ): Promise<{ fileName: string; buffer: Buffer }> {
     const records = await this.repo.findRecords({ month, year });
-    const currentBankingDetails = await this.getCurrentBankingDetails(records);
+    const filteredRows = await this.getBankSalaryExportRows(records, bankGroup);
     let companyName = 'Connect HR';
     try {
       const org = await AppDataSource.getRepository(OrgSettings).findOne({ where: {} });
@@ -1833,34 +1841,6 @@ export class PayrollService {
       // Use the product name when organization branding is unavailable.
     }
 
-    const rows = records.map((record) => {
-        const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
-        const banking = currentBankingDetails.get(record.employeeId);
-        return {
-          employeeName: String(snapshot.employeeName || ''),
-          bankName: banking?.bankName || '',
-          bankAccount: banking?.accountNumber || '',
-          ifscCode: banking?.ifscCode || '',
-          netPay: Number(record.netPay) || 0,
-        };
-      })
-      .sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
-    const isIndusInd = (bankName: string) => {
-      const normalized = bankName.replace(/[^a-z0-9]/gi, '').toLowerCase();
-      // Employee submissions contain several variants such as IndusInd,
-      // Induslnd, and Indusland. They all belong in the IndusInd statement.
-      return normalized.startsWith('indus');
-    };
-    // Bank-processing statements must contain only actionable salary credits.
-    // Omit employees with no calculated salary or incomplete banking details.
-    const payableRows = rows.filter((row) =>
-      row.netPay > 0 && row.bankName.trim() !== '' && row.bankAccount.trim() !== '',
-    );
-    const filteredRows = bankGroup === 'INDUSIND'
-      ? payableRows.filter((row) => isIndusInd(row.bankName))
-      : bankGroup === 'OTHER'
-        ? payableRows.filter((row) => !isIndusInd(row.bankName) && row.ifscCode.trim() !== '')
-        : payableRows;
     const options = bankGroup === 'INDUSIND'
       ? { title: 'IndusInd Bank Salary Statement', filePrefix: 'indusind_bank_salary_statement' }
       : bankGroup === 'OTHER'
@@ -1878,6 +1858,75 @@ export class PayrollService {
       companyName,
       options,
     );
+  }
+
+  async exportBankSalaryExcel(
+    month: number,
+    year: number,
+    bankGroup: 'INDUSIND' | 'OTHER',
+  ): Promise<{ fileName: string; buffer: Buffer }> {
+    const records = await this.repo.findRecords({ month, year });
+    const rows = await this.getBankSalaryExportRows(records, bankGroup);
+    const includeIfsc = bankGroup === 'OTHER';
+    const headers = includeIfsc
+      ? ['S. No.', 'Employee Name', 'Bank Name', 'Account Number', 'IFSC Code', 'Net Pay']
+      : ['S. No.', 'Employee Name', 'Bank Name', 'Account Number', 'Net Pay'];
+    const data = rows.map((row, index) => includeIfsc
+      ? [index + 1, row.employeeName, row.bankName, row.bankAccount, row.ifscCode, row.netPay]
+      : [index + 1, row.employeeName, row.bankName, row.bankAccount, row.netPay]);
+    const totalNetPay = rows.reduce((sum, row) => sum + row.netPay, 0);
+    const totalRow = includeIfsc
+      ? ['', 'TOTAL', '', '', '', totalNetPay]
+      : ['', 'TOTAL', '', '', totalNetPay];
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...data, totalRow]);
+    worksheet['!cols'] = includeIfsc
+      ? [{ wch: 8 }, { wch: 28 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 16 }]
+      : [{ wch: 8 }, { wch: 28 }, { wch: 22 }, { wch: 22 }, { wch: 16 }];
+    worksheet['!autofilter'] = { ref: `A1:${includeIfsc ? 'F' : 'E'}${Math.max(1, rows.length + 1)}` };
+    const netPayColumn = includeIfsc ? 'F' : 'E';
+    for (let rowNumber = 2; rowNumber <= rows.length + 2; rowNumber += 1) {
+      const cell = worksheet[`${netPayColumn}${rowNumber}`];
+      if (cell) cell.z = '₹#,##0.00';
+    }
+    XLSX.utils.book_append_sheet(workbook, worksheet, bankGroup === 'INDUSIND' ? 'IndusInd Bank' : 'Other Banks');
+
+    const prefix = bankGroup === 'INDUSIND' ? 'indusind_bank' : 'other_banks';
+    return {
+      fileName: `${prefix}_salary_statement_${year}_${String(month).padStart(2, '0')}.xlsx`,
+      buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+    };
+  }
+
+  private async getBankSalaryExportRows(
+    records: PayrollRecord[],
+    bankGroup?: 'INDUSIND' | 'OTHER',
+  ): Promise<BankSalaryExportRow[]> {
+    const currentBankingDetails = await this.getCurrentBankingDetails(records);
+    const rows = records
+      .map((record) => {
+        const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+        const banking = currentBankingDetails.get(record.employeeId);
+        return {
+          employeeName: String(snapshot.employeeName || ''),
+          bankName: banking?.bankName || '',
+          bankAccount: banking?.accountNumber || '',
+          ifscCode: banking?.ifscCode || '',
+          netPay: Number(record.netPay) || 0,
+        };
+      })
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
+    const isIndusInd = (bankName: string) =>
+      bankName.replace(/[^a-z0-9]/gi, '').toLowerCase().startsWith('indus');
+    const payableRows = rows.filter((row) =>
+      row.netPay > 0 && row.bankName.trim() !== '' && row.bankAccount.trim() !== '',
+    );
+    if (bankGroup === 'INDUSIND') return payableRows.filter((row) => isIndusInd(row.bankName));
+    if (bankGroup === 'OTHER') {
+      return payableRows.filter((row) => !isIndusInd(row.bankName) && row.ifscCode.trim() !== '');
+    }
+    return payableRows;
   }
 
   private async getCurrentBankAccounts(records: PayrollRecord[]): Promise<Map<string, string>> {

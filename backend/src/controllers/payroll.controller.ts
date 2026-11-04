@@ -290,6 +290,28 @@ export class PayrollController {
     res.send(result.buffer);
   }
 
+  static async bankSalaryExcel(req: Request, res: Response): Promise<void> {
+    const parsed = salaryReportSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw ApiError.badRequest(
+        parsed.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join('; '),
+        'VALIDATION_ERROR',
+      );
+    }
+    const bankGroup = String(req.params.bankGroup || '').toUpperCase();
+    if (bankGroup !== 'INDUSIND' && bankGroup !== 'OTHER') {
+      throw ApiError.badRequest('bankGroup must be INDUSIND or OTHER', 'VALIDATION_ERROR');
+    }
+    const result = await payrollService.exportBankSalaryExcel(
+      parsed.data.month,
+      parsed.data.year,
+      bankGroup as 'INDUSIND' | 'OTHER',
+    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+    res.send(result.buffer);
+  }
+
   // ─── Admin/Employee: Download payslip PDF ───
   static async downloadPayslip(req: Request, res: Response): Promise<void> {
     const pdf = await payrollService.getPayslipPdf(req.params.id as string);
