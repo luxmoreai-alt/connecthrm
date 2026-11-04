@@ -77,6 +77,7 @@ interface ComputedPayrollData {
 interface CurrentBankingDetails {
   bankName: string;
   accountNumber: string;
+  ifscCode: string;
 }
 
 export class PayrollService {
@@ -1839,6 +1840,7 @@ export class PayrollService {
           employeeName: String(snapshot.employeeName || ''),
           bankName: banking?.bankName || '',
           bankAccount: banking?.accountNumber || '',
+          ifscCode: banking?.ifscCode || '',
           netPay: Number(record.netPay) || 0,
         };
       })
@@ -1857,12 +1859,16 @@ export class PayrollService {
     const filteredRows = bankGroup === 'INDUSIND'
       ? payableRows.filter((row) => isIndusInd(row.bankName))
       : bankGroup === 'OTHER'
-        ? payableRows.filter((row) => !isIndusInd(row.bankName))
+        ? payableRows.filter((row) => !isIndusInd(row.bankName) && row.ifscCode.trim() !== '')
         : payableRows;
     const options = bankGroup === 'INDUSIND'
       ? { title: 'IndusInd Bank Salary Statement', filePrefix: 'indusind_bank_salary_statement' }
       : bankGroup === 'OTHER'
-        ? { title: 'Other Banks Salary Statement', filePrefix: 'other_banks_salary_statement' }
+        ? {
+            title: 'Other Banks Salary Statement',
+            filePrefix: 'other_banks_salary_statement',
+            includeIfsc: true,
+          }
         : undefined;
 
     return generateBankSalaryStatementPdf(
@@ -1905,6 +1911,7 @@ export class PayrollService {
       result.set(salary.userId, {
         bankName: salary.bankName || '',
         accountNumber: salary.accountNumber || '',
+        ifscCode: salary.ifscCode || '',
       });
     }
     const resolvedStructures = new Set<string>();
@@ -1914,9 +1921,11 @@ export class PayrollService {
       const current = result.get(structure.employeeId);
       const bankName = String(banking.bankName || '').trim();
       const accountNumber = String(banking.accountNumber || '').trim();
+      const ifscCode = String(banking.ifscCode || '').trim();
       result.set(structure.employeeId, {
         bankName: bankName || current?.bankName || '',
         accountNumber: accountNumber || current?.accountNumber || '',
+        ifscCode: ifscCode || current?.ifscCode || '',
       });
       resolvedStructures.add(structure.employeeId);
     }

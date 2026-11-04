@@ -55,6 +55,7 @@ export interface BankSalaryStatementRow {
   employeeName: string;
   bankName: string;
   bankAccount: string;
+  ifscCode: string;
   netPay: number;
 }
 
@@ -404,7 +405,7 @@ export function generateBankSalaryStatementPdf(
   month: number,
   year: number,
   companyName: string,
-  options?: { title?: string; filePrefix?: string },
+  options?: { title?: string; filePrefix?: string; includeIfsc?: boolean },
 ): Promise<{ buffer: Buffer; fileName: string }> {
   const filePrefix = options?.filePrefix || 'bank_salary_statement';
   const title = options?.title || 'Bank Salary Statement';
@@ -422,13 +423,22 @@ export function generateBankSalaryStatementPdf(
 
     const left = 32;
     const tableWidth = doc.page.width - 64;
-    const columns = [
-      { label: 'S. No.', width: 36, align: 'center' as const },
-      { label: 'Employee Name', width: 160, align: 'left' as const },
-      { label: 'Bank Name', width: 110, align: 'left' as const },
-      { label: 'Account Number', width: 135, align: 'left' as const },
-      { label: 'Net Pay', width: tableWidth - 441, align: 'right' as const },
-    ];
+    const columns = options?.includeIfsc
+      ? [
+          { label: 'S. No.', width: 32, align: 'center' as const },
+          { label: 'Employee Name', width: 125, align: 'left' as const },
+          { label: 'Bank Name', width: 80, align: 'left' as const },
+          { label: 'Account Number', width: 110, align: 'left' as const },
+          { label: 'IFSC Code', width: 85, align: 'left' as const },
+          { label: 'Net Pay', width: tableWidth - 432, align: 'right' as const },
+        ]
+      : [
+          { label: 'S. No.', width: 36, align: 'center' as const },
+          { label: 'Employee Name', width: 160, align: 'left' as const },
+          { label: 'Bank Name', width: 110, align: 'left' as const },
+          { label: 'Account Number', width: 135, align: 'left' as const },
+          { label: 'Net Pay', width: tableWidth - 441, align: 'right' as const },
+        ];
     const rowHeight = 26;
 
     const drawHeader = () => {
@@ -464,14 +474,16 @@ export function generateBankSalaryStatementPdf(
         row.employeeName,
         row.bankName || 'NOT PROVIDED',
         row.bankAccount || 'NOT PROVIDED',
+        ...(options?.includeIfsc ? [row.ifscCode || 'NOT PROVIDED'] : []),
         money(row.netPay),
       ];
       let x = left;
       columns.forEach((column, columnIndex) => {
         doc.rect(x, y, column.width, rowHeight)
           .fillAndStroke(COLORS.white, COLORS.border);
+        const netPayColumn = columns.length - 1;
         doc.fillColor(COLORS.ink)
-          .font(columnIndex === 1 || columnIndex === 4 ? 'Helvetica-Bold' : 'Helvetica')
+          .font(columnIndex === 1 || columnIndex === netPayColumn ? 'Helvetica-Bold' : 'Helvetica')
           .fontSize(8.5)
           .text(safe(values[columnIndex]), x + 6, y + 9, {
             width: column.width - 12,
