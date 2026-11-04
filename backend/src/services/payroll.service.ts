@@ -40,6 +40,7 @@ import { NotificationService } from './notification.service';
 interface AttendanceComputation {
   workingDays: number;
   eligibleWorkingDays: number;
+  calendarDays: number;
   salaryEligibleDays: number;
   payableDays: number;
   presentDays: number;
@@ -354,7 +355,7 @@ export class PayrollService {
     const attendance = await this.computeAttendance(user.id, month, year, profile?.dateOfJoining);
 
     // Smart merge: Excel fields override system, missing fields fallback to system
-    const prorationFactor = this.getThirtyDayProrationFactor(attendance);
+    const prorationFactor = this.getCalendarDayProrationFactor(attendance);
     const earnings = row.earnings.length > 0
       ? this.mergeEarnings(row.earnings, salary, salaryStructure)
       : this.prorateComponents(
@@ -1235,7 +1236,7 @@ export class PayrollService {
       profile?.dateOfJoining,
     );
 
-    const prorationFactor = this.getThirtyDayProrationFactor(attendance);
+    const prorationFactor = this.getCalendarDayProrationFactor(attendance);
     const earnings = this.prorateComponents(
       this.mergeEarnings([], salary, salaryStructure),
       prorationFactor,
@@ -1457,6 +1458,7 @@ export class PayrollService {
         return {
           workingDays,
           eligibleWorkingDays: 0,
+          calendarDays: lastDay,
           salaryEligibleDays: 0,
           payableDays: 0,
           presentDays: 0,
@@ -1474,10 +1476,10 @@ export class PayrollService {
       }
       if (joiningDate > startDate) {
         eligibleStartDay = Number(joiningDate.slice(8, 10));
-        // Salary uses a fixed divisor of 30, but an employee joining during
-        // the month is eligible only for the calendar days they were
-        // employed. Cap 31-day months at 30 salary days.
-        salaryEligibleDays = Math.min(30, lastDay - eligibleStartDay + 1);
+        // Full monthly salary is fixed, but joining-date proration uses the
+        // actual calendar days in the payroll month. In October, joining on
+        // the 7th gives 25 calendar-eligible days (7th through 31st).
+        salaryEligibleDays = Math.max(0, lastDay - eligibleStartDay + 1);
       }
     }
 
@@ -1614,6 +1616,7 @@ export class PayrollService {
     return {
       workingDays,
       eligibleWorkingDays,
+      calendarDays: lastDay,
       salaryEligibleDays,
       payableDays,
       presentDays: round2(presentDays),
@@ -1924,14 +1927,13 @@ export class PayrollService {
    * for the whole month and completed every eligible working day receive the
    * full monthly salary because weekly offs and holidays are paid days.
    */
-  private getThirtyDayProrationFactor(attendance: AttendanceComputation): number {
-    // Weekly offs, holidays, and paid leave remain paid. Start with the
-    // calendar days for which the employee was eligible based on joining date,
-    // then reduce only actual LOP days. Examples: a full-month employee with
-    // 1 LOP receives 29/30; an employee joining on the 22nd of a 31-day month
-    // receives 10/30 before any LOP deduction.
+  private getCalendarDayProrationFactor(attendance: AttendanceComputation): number {
+    // Full monthly salary is paid when there is no joining-date proration or
+    // LOP. When proration is needed, use the actual number of calendar days in
+    // that month as the divisor. Weekly offs, holidays, and paid leave remain
+    // paid. Example: in October, one LOP day deducts 1/31 of monthly salary.
     const payableSalaryDays = attendance.salaryEligibleDays - attendance.lopDays;
-    return Math.min(1, Math.max(0, payableSalaryDays / 30));
+    return Math.min(1, Math.max(0, payableSalaryDays / attendance.calendarDays));
   }
 
   private prorateComponents(
