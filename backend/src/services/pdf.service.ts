@@ -469,8 +469,8 @@ export function generateBankSalaryStatementPdf(
       let x = left;
       columns.forEach((column, columnIndex) => {
         doc.rect(x, y, column.width, rowHeight)
-          .fillAndStroke(index % 2 === 0 ? COLORS.pale : COLORS.white, COLORS.border);
-        doc.fillColor(columnIndex === 4 ? COLORS.green : COLORS.ink)
+          .fillAndStroke(COLORS.white, COLORS.border);
+        doc.fillColor(COLORS.ink)
           .font(columnIndex === 1 || columnIndex === 4 ? 'Helvetica-Bold' : 'Helvetica')
           .fontSize(8.5)
           .text(safe(values[columnIndex]), x + 6, y + 9, {

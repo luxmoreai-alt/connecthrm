@@ -1845,9 +1845,9 @@ export class PayrollService {
       .sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
     const isIndusInd = (bankName: string) => {
       const normalized = bankName.replace(/[^a-z0-9]/gi, '').toLowerCase();
-      // Employees have entered both the correct name (IndusInd) and the
-      // common typo "Indusland". Both belong in the IndusInd statement.
-      return normalized.includes('indusind') || normalized.includes('indusland');
+      // Employee submissions contain several variants such as IndusInd,
+      // Induslnd, and Indusland. They all belong in the IndusInd statement.
+      return normalized.startsWith('indus');
     };
     const filteredRows = bankGroup === 'INDUSIND'
       ? rows.filter((row) => isIndusInd(row.bankName))
