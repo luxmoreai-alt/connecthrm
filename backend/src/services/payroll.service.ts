@@ -1795,20 +1795,22 @@ export class PayrollService {
     }
 
     return generatePayrollRegisterPdf(
-      records.map((record) => {
-        const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
-        return {
-          employeeCode: String(snapshot.employeeCode || ''),
-          employeeName: String(snapshot.employeeName || ''),
-          dateOfJoining: String(snapshot.dateOfJoining || ''),
-          department: String(snapshot.department || ''),
-          bankAccount: currentBankAccounts.get(record.employeeId) || '',
-          grossEarnings: Number(record.grossEarnings) || 0,
-          totalDeductions: Number(record.totalDeductions) || 0,
-          netPay: Number(record.netPay) || 0,
-          status: record.status,
-        };
-      }),
+      records
+        .map((record) => {
+          const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+          return {
+            employeeCode: String(snapshot.employeeCode || ''),
+            employeeName: String(snapshot.employeeName || ''),
+            dateOfJoining: String(snapshot.dateOfJoining || ''),
+            department: String(snapshot.department || ''),
+            bankAccount: currentBankAccounts.get(record.employeeId) || '',
+            grossEarnings: Number(record.grossEarnings) || 0,
+            totalDeductions: Number(record.totalDeductions) || 0,
+            netPay: Number(record.netPay) || 0,
+            status: record.status,
+          };
+        })
+        .sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' })),
       month,
       year,
       companyName,
@@ -1839,9 +1841,14 @@ export class PayrollService {
           bankAccount: banking?.accountNumber || '',
           netPay: Number(record.netPay) || 0,
         };
-      });
-    const isIndusInd = (bankName: string) =>
-      bankName.replace(/[^a-z0-9]/gi, '').toLowerCase().includes('indusind');
+      })
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName, 'en', { sensitivity: 'base' }));
+    const isIndusInd = (bankName: string) => {
+      const normalized = bankName.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      // Employees have entered both the correct name (IndusInd) and the
+      // common typo "Indusland". Both belong in the IndusInd statement.
+      return normalized.includes('indusind') || normalized.includes('indusland');
+    };
     const filteredRows = bankGroup === 'INDUSIND'
       ? rows.filter((row) => isIndusInd(row.bankName))
       : bankGroup === 'OTHER'

@@ -275,7 +275,7 @@ export class PayrollController {
         'VALIDATION_ERROR',
       );
     }
-    const rawBankGroup = String(req.query.bankGroup || '').toUpperCase();
+    const rawBankGroup = String(req.params.bankGroup || req.query.bankGroup || '').toUpperCase();
     if (rawBankGroup && rawBankGroup !== 'INDUSIND' && rawBankGroup !== 'OTHER') {
       throw ApiError.badRequest('bankGroup must be INDUSIND or OTHER', 'VALIDATION_ERROR');
     }
