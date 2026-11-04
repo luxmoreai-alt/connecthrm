@@ -53,6 +53,7 @@ export interface PayrollRegisterRow {
 
 export interface BankSalaryStatementRow {
   employeeName: string;
+  bankName: string;
   bankAccount: string;
   netPay: number;
 }
@@ -403,8 +404,11 @@ export function generateBankSalaryStatementPdf(
   month: number,
   year: number,
   companyName: string,
+  options?: { title?: string; filePrefix?: string },
 ): Promise<{ buffer: Buffer; fileName: string }> {
-  const fileName = `bank_salary_statement_${year}_${String(month).padStart(2, '0')}.pdf`;
+  const filePrefix = options?.filePrefix || 'bank_salary_statement';
+  const title = options?.title || 'Bank Salary Statement';
+  const fileName = `${filePrefix}_${year}_${String(month).padStart(2, '0')}.pdf`;
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
@@ -419,10 +423,11 @@ export function generateBankSalaryStatementPdf(
     const left = 32;
     const tableWidth = doc.page.width - 64;
     const columns = [
-      { label: 'S. No.', width: 38, align: 'center' as const },
-      { label: 'Employee Name', width: 195, align: 'left' as const },
-      { label: 'Account Number', width: 165, align: 'left' as const },
-      { label: 'Net Pay', width: tableWidth - 398, align: 'right' as const },
+      { label: 'S. No.', width: 36, align: 'center' as const },
+      { label: 'Employee Name', width: 160, align: 'left' as const },
+      { label: 'Bank Name', width: 110, align: 'left' as const },
+      { label: 'Account Number', width: 135, align: 'left' as const },
+      { label: 'Net Pay', width: tableWidth - 441, align: 'right' as const },
     ];
     const rowHeight = 26;
 
@@ -430,7 +435,7 @@ export function generateBankSalaryStatementPdf(
       doc.fillColor(COLORS.navy).font('Helvetica-Bold').fontSize(17)
         .text(companyName || 'Connect HR', left, 30, { width: tableWidth });
       doc.fillColor(COLORS.ink).fontSize(13)
-        .text(`Bank Salary Statement - ${MONTH_NAMES[month - 1]} ${year}`, left, 57, { width: tableWidth });
+        .text(`${title} - ${MONTH_NAMES[month - 1]} ${year}`, left, 57, { width: tableWidth });
       doc.fillColor(COLORS.muted).font('Helvetica').fontSize(8)
         .text(`Generated ${new Date().toLocaleString('en-IN')}`, left, 78, { width: tableWidth });
 
@@ -457,6 +462,7 @@ export function generateBankSalaryStatementPdf(
       const values = [
         String(index + 1),
         row.employeeName,
+        row.bankName || 'NOT PROVIDED',
         row.bankAccount || 'NOT PROVIDED',
         money(row.netPay),
       ];
@@ -464,8 +470,8 @@ export function generateBankSalaryStatementPdf(
       columns.forEach((column, columnIndex) => {
         doc.rect(x, y, column.width, rowHeight)
           .fillAndStroke(index % 2 === 0 ? COLORS.pale : COLORS.white, COLORS.border);
-        doc.fillColor(columnIndex === 3 ? COLORS.green : COLORS.ink)
-          .font(columnIndex === 1 || columnIndex === 3 ? 'Helvetica-Bold' : 'Helvetica')
+        doc.fillColor(columnIndex === 4 ? COLORS.green : COLORS.ink)
+          .font(columnIndex === 1 || columnIndex === 4 ? 'Helvetica-Bold' : 'Helvetica')
           .fontSize(8.5)
           .text(safe(values[columnIndex]), x + 6, y + 9, {
             width: column.width - 12,

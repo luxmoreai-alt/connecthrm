@@ -74,6 +74,11 @@ interface ComputedPayrollData {
   pfEmployerContribution: number;
 }
 
+interface CurrentBankingDetails {
+  bankName: string;
+  accountNumber: string;
+}
+
 export class PayrollService {
   private repo: PayrollRepository;
 
@@ -1813,9 +1818,10 @@ export class PayrollService {
   async exportBankSalaryStatement(
     month: number,
     year: number,
+    bankGroup?: 'INDUSIND' | 'OTHER',
   ): Promise<{ fileName: string; buffer: Buffer }> {
     const records = await this.repo.findRecords({ month, year });
-    const currentBankAccounts = await this.getCurrentBankAccounts(records);
+    const currentBankingDetails = await this.getCurrentBankingDetails(records);
     let companyName = 'Connect HR';
     try {
       const org = await AppDataSource.getRepository(OrgSettings).findOne({ where: {} });
@@ -1824,24 +1830,50 @@ export class PayrollService {
       // Use the product name when organization branding is unavailable.
     }
 
-    return generateBankSalaryStatementPdf(
-      records.map((record) => {
+    const rows = records.map((record) => {
         const snapshot = (record.employeeSnapshot || {}) as Record<string, unknown>;
+        const banking = currentBankingDetails.get(record.employeeId);
         return {
           employeeName: String(snapshot.employeeName || ''),
-          bankAccount: currentBankAccounts.get(record.employeeId) || '',
+          bankName: banking?.bankName || '',
+          bankAccount: banking?.accountNumber || '',
           netPay: Number(record.netPay) || 0,
         };
-      }),
+      });
+    const isIndusInd = (bankName: string) =>
+      bankName.replace(/[^a-z0-9]/gi, '').toLowerCase().includes('indusind');
+    const filteredRows = bankGroup === 'INDUSIND'
+      ? rows.filter((row) => isIndusInd(row.bankName))
+      : bankGroup === 'OTHER'
+        ? rows.filter((row) => !isIndusInd(row.bankName))
+        : rows;
+    const options = bankGroup === 'INDUSIND'
+      ? { title: 'IndusInd Bank Salary Statement', filePrefix: 'indusind_bank_salary_statement' }
+      : bankGroup === 'OTHER'
+        ? { title: 'Other Banks Salary Statement', filePrefix: 'other_banks_salary_statement' }
+        : undefined;
+
+    return generateBankSalaryStatementPdf(
+      filteredRows,
       month,
       year,
       companyName,
+      options,
     );
   }
 
   private async getCurrentBankAccounts(records: PayrollRecord[]): Promise<Map<string, string>> {
+    const bankingDetails = await this.getCurrentBankingDetails(records);
+    return new Map(
+      [...bankingDetails.entries()].map(([employeeId, banking]) => [employeeId, banking.accountNumber]),
+    );
+  }
+
+  private async getCurrentBankingDetails(
+    records: PayrollRecord[],
+  ): Promise<Map<string, CurrentBankingDetails>> {
     const employeeIds = [...new Set(records.map((record) => record.employeeId).filter(Boolean))];
-    const result = new Map<string, string>();
+    const result = new Map<string, CurrentBankingDetails>();
     if (!employeeIds.length) return result;
 
     const [structures, legacySalaries] = await Promise.all([
@@ -1858,14 +1890,22 @@ export class PayrollService {
     ]);
 
     for (const salary of legacySalaries) {
-      if (salary.accountNumber) result.set(salary.userId, salary.accountNumber);
+      result.set(salary.userId, {
+        bankName: salary.bankName || '',
+        accountNumber: salary.accountNumber || '',
+      });
     }
     const resolvedStructures = new Set<string>();
     for (const structure of structures) {
       if (resolvedStructures.has(structure.employeeId)) continue;
       const banking = (structure.bankingInfo || {}) as Record<string, unknown>;
+      const current = result.get(structure.employeeId);
+      const bankName = String(banking.bankName || '').trim();
       const accountNumber = String(banking.accountNumber || '').trim();
-      if (accountNumber) result.set(structure.employeeId, accountNumber);
+      result.set(structure.employeeId, {
+        bankName: bankName || current?.bankName || '',
+        accountNumber: accountNumber || current?.accountNumber || '',
+      });
       resolvedStructures.add(structure.employeeId);
     }
     return result;

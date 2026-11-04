@@ -260,10 +260,10 @@ export const payrollApi = {
       `payroll_register_${params.year}_${String(params.month).padStart(2, "0")}.pdf`,
     ),
 
-  downloadBankSalaryStatement: (params: { month: number; year: number }) =>
+  downloadBankSalaryStatement: (params: { month: number; year: number; bankGroup: "INDUSIND" | "OTHER" }) =>
     api.downloadBlob(
-      `${BASE}/reports/salary/bank-pdf?month=${params.month}&year=${params.year}`,
-      `bank_salary_statement_${params.year}_${String(params.month).padStart(2, "0")}.pdf`,
+      `${BASE}/reports/salary/bank-pdf?month=${params.month}&year=${params.year}&bankGroup=${params.bankGroup}`,
+      `${params.bankGroup === "INDUSIND" ? "indusind_bank" : "other_banks"}_salary_statement_${params.year}_${String(params.month).padStart(2, "0")}.pdf`,
     ),
 
   downloadPayslipUrl: (id: string) =>

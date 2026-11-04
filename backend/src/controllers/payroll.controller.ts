@@ -275,7 +275,16 @@ export class PayrollController {
         'VALIDATION_ERROR',
       );
     }
-    const result = await payrollService.exportBankSalaryStatement(parsed.data.month, parsed.data.year);
+    const rawBankGroup = String(req.query.bankGroup || '').toUpperCase();
+    if (rawBankGroup && rawBankGroup !== 'INDUSIND' && rawBankGroup !== 'OTHER') {
+      throw ApiError.badRequest('bankGroup must be INDUSIND or OTHER', 'VALIDATION_ERROR');
+    }
+    const bankGroup = rawBankGroup as 'INDUSIND' | 'OTHER' | undefined;
+    const result = await payrollService.exportBankSalaryStatement(
+      parsed.data.month,
+      parsed.data.year,
+      bankGroup || undefined,
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
     res.send(result.buffer);

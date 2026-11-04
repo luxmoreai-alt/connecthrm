@@ -132,7 +132,7 @@ export default function PayrollPage() {
   const [deleteTarget, setDeleteTarget] = useState<PayrollRecordType | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
-  const [exporting, setExporting] = useState<"excel" | "pdf" | "bank" | null>(null);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | "indusind" | "otherBanks" | null>(null);
   const deleteDisclosure = useDisclosure();
   const deleteAllDisclosure = useDisclosure();
   const cancelDeleteRef = useRef<HTMLButtonElement>(null);
@@ -360,10 +360,10 @@ export default function PayrollPage() {
     }
   };
 
-  const handleBankExport = async () => {
-    setExporting("bank");
+  const handleBankExport = async (bankGroup: "INDUSIND" | "OTHER") => {
+    setExporting(bankGroup === "INDUSIND" ? "indusind" : "otherBanks");
     try {
-      await payrollApi.downloadBankSalaryStatement({ month, year });
+      await payrollApi.downloadBankSalaryStatement({ month, year, bankGroup });
     } catch (err: any) {
       toast({ title: "Bank PDF export failed", description: err.message, status: "error", duration: 3500, isClosable: true });
     } finally {
@@ -456,11 +456,20 @@ export default function PayrollPage() {
                     <SecondaryButton
                       size="sm"
                       leftIcon={<Download size={15} />}
-                      isLoading={exporting === "bank"}
+                      isLoading={exporting === "indusind"}
                       isDisabled={Boolean(exporting) || !summary?.totalRecords}
-                      onClick={() => { void handleBankExport(); }}
+                      onClick={() => { void handleBankExport("INDUSIND"); }}
                     >
-                      Bank PDF
+                      IndusInd PDF
+                    </SecondaryButton>
+                    <SecondaryButton
+                      size="sm"
+                      leftIcon={<Download size={15} />}
+                      isLoading={exporting === "otherBanks"}
+                      isDisabled={Boolean(exporting) || !summary?.totalRecords}
+                      onClick={() => { void handleBankExport("OTHER"); }}
+                    >
+                      Other Banks PDF
                     </SecondaryButton>
                     <SecondaryButton
                       size="sm"
