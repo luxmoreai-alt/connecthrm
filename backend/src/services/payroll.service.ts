@@ -1849,11 +1849,16 @@ export class PayrollService {
       // Induslnd, and Indusland. They all belong in the IndusInd statement.
       return normalized.startsWith('indus');
     };
+    // Bank-processing statements must contain only actionable salary credits.
+    // Omit employees with no calculated salary or incomplete banking details.
+    const payableRows = rows.filter((row) =>
+      row.netPay > 0 && row.bankName.trim() !== '' && row.bankAccount.trim() !== '',
+    );
     const filteredRows = bankGroup === 'INDUSIND'
-      ? rows.filter((row) => isIndusInd(row.bankName))
+      ? payableRows.filter((row) => isIndusInd(row.bankName))
       : bankGroup === 'OTHER'
-        ? rows.filter((row) => !isIndusInd(row.bankName))
-        : rows;
+        ? payableRows.filter((row) => !isIndusInd(row.bankName))
+        : payableRows;
     const options = bankGroup === 'INDUSIND'
       ? { title: 'IndusInd Bank Salary Statement', filePrefix: 'indusind_bank_salary_statement' }
       : bankGroup === 'OTHER'
