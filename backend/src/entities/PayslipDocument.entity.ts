@@ -22,6 +22,9 @@ export class PayslipDocument {
   @Column({ type: 'varchar', length: 500 })
   filePath: string;
 
+  @Column({ type: 'boolean', default: false })
+  isReleased: boolean;
+
   @Column({ type: 'varchar', length: 50, default: 'application/pdf' })
   mimeType: string;
 

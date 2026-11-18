@@ -43,6 +43,7 @@ export default function EmployeePayrollPage() {
   const [year, setYear] = useState(currentYear);
   const [records, setRecords] = useState<PayrollRecordType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<PayrollRecordType | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -50,10 +51,14 @@ export default function EmployeePayrollPage() {
 
   useEffect(() => {
     setLoading(true);
+    setLoadError(null);
     payrollApi
       .myPayslips(year)
       .then(setRecords)
-      .catch(() => setRecords([]))
+      .catch((err: any) => {
+        setRecords([]);
+        setLoadError(err?.message || "Could not load your payslips. Please try again.");
+      })
       .finally(() => setLoading(false));
   }, [year]);
 
@@ -232,6 +237,11 @@ export default function EmployeePayrollPage() {
         <Box p={5}>
           {loading ? (
             <Flex justify="center" py={10}><Spinner color="brand.500" /></Flex>
+          ) : loadError ? (
+            <Flex direction="column" align="center" py={12} textAlign="center">
+              <Text fontWeight="600" color="red.600" mb={1}>Payslips could not be loaded</Text>
+              <Text color="text.muted" fontSize="sm">{loadError}</Text>
+            </Flex>
           ) : records.length === 0 ? (
             <Flex direction="column" align="center" py={12} textAlign="center">
               <Flex w={14} h={14} borderRadius="2xl" bg="brand.50" align="center" justify="center" mb={4}>

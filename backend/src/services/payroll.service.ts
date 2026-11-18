@@ -789,7 +789,7 @@ export class PayrollService {
     }
     const doc = record.payslipDocument || (await this.repo.findDocByRecordId(recordId));
     if (!doc) throw ApiError.badRequest('Payslip document is not ready');
-    await this.repo.updateDocument(doc.id, { filePath: 'released' } as any);
+    await this.repo.updateDocument(doc.id, { isReleased: true });
     const period = `${record.month}/${record.year}`;
     await new NotificationService().notifyUser(
       record.employeeId,
@@ -2197,7 +2197,7 @@ export class PayrollService {
       remarks: r.remarks,
       hasPayslip: !!r.payslipDocument,
       payslipFileName: r.payslipDocument?.fileName || null,
-      isReleased: r.payslipDocument?.filePath === 'released',
+      isReleased: r.payslipDocument?.isReleased === true,
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     };

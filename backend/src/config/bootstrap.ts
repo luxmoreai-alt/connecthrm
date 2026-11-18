@@ -62,6 +62,15 @@ export const ensureBackendReady = async (): Promise<void> => {
          ADD COLUMN IF NOT EXISTS "gstNumber" character varying(15),
          ADD COLUMN IF NOT EXISTS "payslipAdditionalFields" jsonb NOT NULL DEFAULT '[]'::jsonb`,
       );
+      // Keep payslip release state separate from the generated document path.
+      // This additive patch also covers deployments that do not run migrations.
+      await AppDataSource.query(
+        `ALTER TABLE "payslip_documents"
+         ADD COLUMN IF NOT EXISTS "isReleased" boolean NOT NULL DEFAULT false`,
+      );
+      await AppDataSource.query(
+        `UPDATE "payslip_documents" SET "isReleased" = true WHERE "filePath" = 'released'`,
+      );
       await AppDataSource.query(`CREATE TABLE IF NOT EXISTS "push_subscriptions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "userId" uuid NOT NULL,
