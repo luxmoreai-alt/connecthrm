@@ -55,7 +55,7 @@ export class PayrollController {
     }
     const result = await payrollService.generateManual({
       ...parsed.data,
-      adminId: (req as any).user?.id,
+      adminId: req.user?.userId,
     });
     ApiResponse.success(res, 'Payroll generated successfully', result, 201);
   }
@@ -81,7 +81,7 @@ export class PayrollController {
       req.file.originalname,
       parsed.data.month,
       parsed.data.year,
-      (req as any).user?.id,
+      req.user?.userId,
     );
     ApiResponse.success(res, 'Bulk import started', result, 202);
   }
@@ -322,7 +322,7 @@ export class PayrollController {
 
   // ─── Employee: My payslips ───
   static async myPayslips(req: Request, res: Response): Promise<void> {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Not authenticated');
     const parsed = listPayslipsSchema.safeParse(req.query);
     const year = parsed.success ? parsed.data.year : undefined;
@@ -332,7 +332,7 @@ export class PayrollController {
 
   // ─── Employee: My payslip detail ───
   static async myPayslipDetail(req: Request, res: Response): Promise<void> {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Not authenticated');
     const record = await payrollService.getRecord(req.params.id as string);
     if (record.employeeId !== userId) {
@@ -344,7 +344,7 @@ export class PayrollController {
 
   // ─── Employee: Download my payslip ───
   static async downloadMyPayslip(req: Request, res: Response): Promise<void> {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.userId;
     if (!userId) throw ApiError.unauthorized('Not authenticated');
     const record = await payrollService.getRecord(req.params.id as string);
     if (record.employeeId !== userId) {
